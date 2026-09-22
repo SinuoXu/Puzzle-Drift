@@ -37,12 +37,25 @@ function describe(activity: Activity) {
       const label = value === "active" ? "开放漂流" : value === "paused" ? "暂停漂流" : "结束漂流";
       return `将《${activity.puzzle_name}》设为“${label}”`;
     }
+    case "admin_forced_end":
+      return `强制结束了《${activity.puzzle_name}》的漂流`;
     default:
       return `更新了《${activity.puzzle_name}》`;
   }
 }
 
-export function ActivityFeed({ activities, onOpenPuzzle, onOpenUser }: { activities: Activity[]; onOpenPuzzle: (id: string) => void; onOpenUser: (id: string) => void }) {
+export function ActivityFeed({ activities, isAdmin, onOpenPuzzle, onOpenUser, onChanged }: { activities: Activity[]; isAdmin: boolean; onOpenPuzzle: (id: string) => void; onOpenUser: (id: string) => void; onChanged: () => Promise<void> }) {
+  async function remove(activity: Activity) {
+    if (!window.confirm(`删除这条关于《${activity.puzzle_name}》的消息？`)) return;
+    const response = await fetch(`/api/admin/activity/${activity.id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      window.alert(data.error ?? "删除消息失败。");
+      return;
+    }
+    await onChanged();
+  }
+
   if (activities.length === 0) {
     return <div className="emptyPanel">暂时还没有动态。发布第一张拼图后，这里会自动出现消息。</div>;
   }
@@ -50,20 +63,18 @@ export function ActivityFeed({ activities, onOpenPuzzle, onOpenUser }: { activit
   return (
     <div className="activityList">
       {activities.map((activity) => (
-        <button
-          type="button"
-          className="activityItem"
-          key={activity.id}
-          onClick={() => onOpenPuzzle(activity.puzzle_id)}
-        >
-          <Avatar name={activity.actor_name} url={activity.actor_avatar_url} size={38} onOpen={activity.actor_id ? () => onOpenUser(activity.actor_id as string) : undefined} />
-          <div className="activityCopy">
-            <div>
-              <strong>{activity.actor_name}</strong> {describe(activity)}
+        <article className="activityItem" key={activity.id}>
+          <button type="button" className="activityOpen" onClick={() => onOpenPuzzle(activity.puzzle_id)}>
+            <Avatar name={activity.actor_name} url={activity.actor_avatar_url} size={38} onOpen={activity.actor_id ? () => onOpenUser(activity.actor_id as string) : undefined} />
+            <div className="activityCopy">
+              <div>
+                <strong>{activity.actor_name}</strong> {describe(activity)}
+              </div>
+              <span>{formatTime(activity.created_at)}</span>
             </div>
-            <span>{formatTime(activity.created_at)}</span>
-          </div>
-        </button>
+          </button>
+          {isAdmin && <button type="button" className="textButton activityDelete" onClick={() => void remove(activity)}>删除</button>}
+        </article>
       ))}
     </div>
   );

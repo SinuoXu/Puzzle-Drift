@@ -11,32 +11,48 @@ export async function GET() {
     .select("id, puzzle_id, journey_id, kind, amount_cents, payee_id, created_at")
     .eq("user_id", user.id).eq("status", "open").order("created_at");
   if (error) return NextResponse.json({ error: "读取待办失败。" }, { status: 500 });
-  const userIds = [...new Set((tasks ?? []).map((task) => task.payee_id).filter(Boolean))];
-  const puzzleIds = [...new Set((tasks ?? []).map((task) => task.puzzle_id))];
-  const { data: puzzleNames } = puzzleIds.length ? await db.from("puzzles").select("id, name").in("id", puzzleIds) : { data: [] };
-  const puzzleNameMap = new Map((puzzleNames ?? []).map((puzzle) => [puzzle.id, puzzle.name]));
-  const { data: payees } = userIds.length ? await db.from("app_users")
-    .select("id, username, payment_qr_url").in("id", userIds) : { data: [] };
-  const payeeMap = new Map((payees ?? []).map((payee) => [payee.id, payee]));
-  const enriched = await Promise.all((tasks ?? []).map(async (task) => {
+  const taskRows = tasks ?? [];
+  const userIds = [...new Set(taskRows.map((task) => task.payee_id).filter(Boolean))];
+  const puzzleIds = [...new Set(taskRows.map((task) => task.puzzle_id))];
+  const [puzzlesResult, journeysResult] = await Promise.all([
+    puzzleIds.length ? db.from("puzzles").select("id, name, owner_id").in("id", puzzleIds) : Promise.resolve({ data: [], error: null }),
+    puzzleIds.length ? db.from("puzzle_journey").select("id, puzzle_id, user_id, seq, status").in("puzzle_id", puzzleIds) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (puzzlesResult.error || journeysResult.error) return NextResponse.json({ error: "读取待办详情失败。" }, { status: 500 });
+
+  const puzzles = puzzlesResult.data ?? [];
+  const journeys = journeysResult.data ?? [];
+  const puzzleMap = new Map(puzzles.map((puzzle) => [puzzle.id, puzzle]));
+  const journeyMap = new Map(journeys.map((journey) => [journey.id, journey]));
+  const recipientIds = new Set(userIds as string[]);
+  for (const task of taskRows) {
+    if (task.kind !== "ship" && task.kind !== "shipping_fee") continue;
+    const turn = task.journey_id ? journeyMap.get(task.journey_id) : null;
+    const next = journeys
+      .filter((row) => row.puzzle_id === task.puzzle_id && row.status === "waiting" && row.seq > (turn?.seq ?? -1))
+      .sort((a, b) => a.seq - b.seq)[0];
+    recipientIds.add(next?.user_id ?? puzzleMap.get(task.puzzle_id)?.owner_id ?? "");
+  }
+  recipientIds.delete("");
+  const { data: people, error: peopleError } = recipientIds.size ? await db.from("app_users")
+    .select("id, username, payment_qr_url, shipping_address").in("id", [...recipientIds]) : { data: [], error: null };
+  if (peopleError) return NextResponse.json({ error: "读取待办联系人失败。" }, { status: 500 });
+  const peopleMap = new Map((people ?? []).map((person) => [person.id, person]));
+
+  const enriched = taskRows.map((task) => {
     let destination: { username: string; shipping_address: string | null } | null = null;
     if (task.kind === "ship" || task.kind === "shipping_fee") {
-      const { data: turn } = await db.from("puzzle_journey").select("seq").eq("id", task.journey_id).single();
-      const { data: next } = await db.from("puzzle_journey").select("user_id").eq("puzzle_id", task.puzzle_id)
-        .eq("status", "waiting").gt("seq", turn?.seq ?? -1).order("seq").limit(1).maybeSingle();
-      let recipientId = next?.user_id;
-      if (!recipientId) {
-        const { data: puzzle } = await db.from("puzzles").select("owner_id").eq("id", task.puzzle_id).single();
-        recipientId = puzzle?.owner_id;
-      }
-      if (recipientId) {
-        const { data: recipient } = await db.from("app_users").select("username, shipping_address").eq("id", recipientId).single();
-        destination = recipient ?? null;
-      }
+      const turn = task.journey_id ? journeyMap.get(task.journey_id) : null;
+      const next = journeys
+        .filter((row) => row.puzzle_id === task.puzzle_id && row.status === "waiting" && row.seq > (turn?.seq ?? -1))
+        .sort((a, b) => a.seq - b.seq)[0];
+      const recipient = peopleMap.get(next?.user_id ?? puzzleMap.get(task.puzzle_id)?.owner_id ?? "");
+      destination = recipient ? { username: recipient.username, shipping_address: recipient.shipping_address ?? null } : null;
     }
-    return { ...task, puzzle_name: puzzleNameMap.get(task.puzzle_id) ?? "拼图", payee: task.payee_id ? payeeMap.get(task.payee_id) ?? null : null, destination };
-  }));
-  return NextResponse.json({ tasks: enriched }, { headers: { "Cache-Control": "no-store" } });
+    const payee = task.payee_id ? peopleMap.get(task.payee_id) ?? null : null;
+    return { ...task, puzzle_name: puzzleMap.get(task.puzzle_id)?.name ?? "拼图", payee: payee ? { username: payee.username, payment_qr_url: payee.payment_qr_url ?? null } : null, destination };
+  });
+  return NextResponse.json({ tasks: enriched }, { headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=60", Vary: "Cookie" } });
 }
 
 export async function POST(request: NextRequest) {
