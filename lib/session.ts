@@ -24,11 +24,14 @@ export async function createSession(userId: string): Promise<{
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+  const { data: user, error: userError } = await db.from("app_users").select("session_version").eq("id", userId).single();
+  if (userError) throw new Error(`Failed to read user session version: ${userError.message}`);
 
   const { error } = await db.from("app_sessions").insert({
     user_id: userId,
     token_hash: tokenHash,
     expires_at: expiresAt.toISOString(),
+    session_version: user.session_version,
   });
 
   if (error) throw new Error(`Failed to create session: ${error.message}`);
@@ -56,7 +59,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 
   const { data: session, error: sessionError } = await db
     .from("app_sessions")
-    .select("user_id, expires_at")
+    .select("user_id, expires_at, session_version")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
@@ -70,12 +73,13 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 
   const { data: user, error: userError } = await db
     .from("app_users")
-    .select("id, username, avatar_url, is_admin")
+    .select("id, username, avatar_url, is_admin, session_version")
     .eq("id", session.user_id)
     .maybeSingle();
 
   if (userError) throw new Error(`Failed to read user: ${userError.message}`);
   if (!user) return null;
+  if (session.session_version !== user.session_version) return null;
 
   return {
     id: user.id,

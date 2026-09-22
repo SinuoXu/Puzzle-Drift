@@ -3,8 +3,7 @@ export async function compressImage(file: File): Promise<File> {
     throw new Error("请选择图片文件。");
   }
 
-  // Already small enough: keep it as-is.
-  if (file.size <= 900_000) return file;
+  if (file.size < 1_000_000) return file;
 
   const objectUrl = URL.createObjectURL(file);
 
@@ -16,7 +15,7 @@ export async function compressImage(file: File): Promise<File> {
       img.src = objectUrl;
     });
 
-    const maxSide = 1920;
+    const maxSide = 1600;
     const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
     const width = Math.max(1, Math.round(image.naturalWidth * scale));
     const height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -30,26 +29,27 @@ export async function compressImage(file: File): Promise<File> {
 
     ctx.drawImage(image, 0, 0, width, height);
 
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, "image/webp", 0.82);
-    });
-
-    if (!blob || blob.size >= file.size) return file;
+    let blob: Blob | null = null;
+    for (const quality of [0.8, 0.65, 0.5, 0.35]) {
+      blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", quality));
+      if (blob && blob.size < 1_000_000) break;
+    }
+    if (!blob || blob.size >= 1_000_000) throw new Error("图片压缩后仍超过 1 MB，请换一张图片。");
 
     const baseName = file.name.replace(/\.[^.]+$/, "") || "image";
     return new File([blob], `${baseName}.webp`, { type: "image/webp" });
-  } catch {
-    return file;
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("图片压缩失败。");
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
 }
 
-export async function uploadImage(file: File, kind: "cover" | "received" | "shipped"): Promise<string> {
+export async function uploadImage(file: File, kind: "cover" | "received" | "shipped" | "avatar" | "payment_qr" | "receipt"): Promise<string> {
   const compressed = await compressImage(file);
 
-  if (compressed.size > 6 * 1024 * 1024) {
-    throw new Error("图片压缩后仍超过 6 MB，请换一张更小的图片。");
+  if (compressed.size >= 1_000_000) {
+    throw new Error("图片压缩后仍超过 1 MB，请换一张更小的图片。");
   }
 
   const form = new FormData();

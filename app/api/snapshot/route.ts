@@ -18,12 +18,12 @@ export async function GET() {
       db.from("app_users").select("id, username, avatar_url, is_admin"),
       db
         .from("puzzles")
-        .select("id, name, brand, description, cover_url, owner_id, current_holder_id, availability, created_at, updated_at")
+        .select("id, name, brand, description, cover_url, owner_id, current_holder_id, availability, in_transit, created_at, updated_at")
         .order("created_at", { ascending: false }),
       db
         .from("puzzle_journey")
         .select(
-          "id, puzzle_id, user_id, seq, status, is_owner_start, joined_at, received_on, received_photo_url, receiving_note, shipped_on, shipping_photo_url, shipping_note"
+          "id, puzzle_id, user_id, seq, status, is_owner_start, joined_at, received_on, shipped_on"
         )
         .order("seq", { ascending: true }),
       db
@@ -56,12 +56,8 @@ export async function GET() {
       const rawJourney = journeyByPuzzle.get(puzzle.id) ?? [];
       const waitingCount = rawJourney.filter((entry) => entry.status === "waiting").length;
 
-      let driftState: "idle" | "waiting_to_ship" | "drifting" = "idle";
-      if (puzzle.current_holder_id !== puzzle.owner_id) {
-        driftState = "drifting";
-      } else if (waitingCount > 0) {
-        driftState = "waiting_to_ship";
-      }
+      const driftState = puzzle.availability === "retired" ? "retired" :
+        waitingCount > 0 || puzzle.in_transit ? "drifting" : "idle";
 
       return {
         ...puzzle,
@@ -82,11 +78,7 @@ export async function GET() {
             is_owner_start: entry.is_owner_start,
             joined_at: entry.joined_at,
             received_on: entry.received_on,
-            received_photo_url: entry.received_photo_url,
-            receiving_note: entry.receiving_note ?? "",
             shipped_on: entry.shipped_on,
-            shipping_photo_url: entry.shipping_photo_url,
-            shipping_note: entry.shipping_note ?? "",
           };
         }),
       };
@@ -102,6 +94,7 @@ export async function GET() {
         puzzle_name: puzzle?.name ?? "已删除拼图",
         actor_id: activity.actor_id,
         actor_name: actor?.username ?? "系统",
+        actor_avatar_url: actor?.avatar_url ?? null,
         payload: activity.payload ?? {},
         created_at: activity.created_at,
       };

@@ -4,14 +4,12 @@ import type { Puzzle } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 
 function stateLabel(puzzle: Puzzle) {
-  if (puzzle.availability === "paused") return { text: "暂停漂流", cls: "statusMuted" };
-  if (puzzle.availability === "retired") return { text: "结束漂流", cls: "statusMuted" };
-  if (puzzle.drift_state === "drifting") return { text: `在 ${puzzle.current_holder_name} 手里`, cls: "statusGreen" };
-  if (puzzle.drift_state === "waiting_to_ship") return { text: "待图主发出", cls: "statusAmber" };
+  if (puzzle.availability === "retired") return { text: "退役", cls: "statusMuted" };
+  if (puzzle.drift_state === "drifting") return { text: "正在漂", cls: "statusGreen" };
   return { text: "目前没在漂", cls: "statusMuted" };
 }
 
-export function PuzzleCard({ puzzle, onOpen }: { puzzle: Puzzle; onOpen: (id: string) => void }) {
+export function PuzzleCard({ puzzle, onOpen, onOpenUser }: { puzzle: Puzzle; onOpen: (id: string) => void; onOpenUser: (id: string) => void }) {
   const state = stateLabel(puzzle);
 
   return (
@@ -32,7 +30,7 @@ export function PuzzleCard({ puzzle, onOpen }: { puzzle: Puzzle; onOpen: (id: st
         </div>
 
         <div className="ownerLine">
-          <Avatar name={puzzle.owner_name} size={28} />
+          <Avatar name={puzzle.owner_name} url={puzzle.owner_avatar_url} size={28} onOpen={() => onOpenUser(puzzle.owner_id)} />
           <span>图主 {puzzle.owner_name}</span>
         </div>
       </div>

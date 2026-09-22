@@ -15,11 +15,7 @@ export type JourneyEntry = {
   is_owner_start: boolean;
   joined_at: string;
   received_on: string | null;
-  received_photo_url: string | null;
-  receiving_note: string;
   shipped_on: string | null;
-  shipping_photo_url: string | null;
-  shipping_note: string;
 };
 
 export type Puzzle = {
@@ -36,7 +32,8 @@ export type Puzzle = {
   availability: "active" | "paused" | "retired";
   created_at: string;
   updated_at: string;
-  drift_state: "idle" | "waiting_to_ship" | "drifting";
+  drift_state: "idle" | "drifting" | "retired";
+  in_transit: boolean;
   waiting_count: number;
   journey: JourneyEntry[];
 };
@@ -48,6 +45,7 @@ export type Activity = {
   puzzle_name: string;
   actor_id: string | null;
   actor_name: string;
+  actor_avatar_url: string | null;
   payload: Record<string, unknown>;
   created_at: string;
 };

@@ -70,7 +70,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     if ("availability" in input) {
-      if (typeof input.availability !== "string" || !["active", "paused", "retired"].includes(input.availability)) {
+      if (typeof input.availability !== "string" || !["active", "paused"].includes(input.availability)) {
         return NextResponse.json({ error: "开放状态不正确。" }, { status: 400 });
       }
       update.availability = input.availability;
@@ -92,24 +92,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 }
 
 export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await context.params;
-    if (!UUID_RE.test(id)) return NextResponse.json({ error: "无效的拼图 ID。" }, { status: 400 });
-
-    const { user, puzzle } = await canManagePuzzle(id);
-    if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
-    if (!puzzle) return NextResponse.json({ error: "拼图不存在。" }, { status: 404 });
-    if (puzzle.owner_id !== user.id && !user.is_admin) {
-      return NextResponse.json({ error: "只有图主或管理员可以删除。" }, { status: 403 });
-    }
-
-    const db = getSupabaseAdmin();
-    const { error } = await db.from("puzzles").delete().eq("id", id);
-    if (error) throw new Error(error.message);
-
-    return new NextResponse(null, { status: 204 });
-  } catch (error) {
-    console.error("DELETE /api/puzzles/[id] failed", error);
-    return NextResponse.json({ error: "删除拼图失败。" }, { status: 500 });
-  }
+  void _request;
+  void context;
+  return NextResponse.json({ error: "为保护历史数据，v0.3 不提供删除拼图。" }, { status: 405 });
 }

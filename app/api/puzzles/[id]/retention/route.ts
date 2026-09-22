@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { isUploadedImageUrl } from "@/lib/image-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ function friendlyRpcError(message: string): string {
   if (message.includes("before shipping")) return "请先提交收货留存，再提交发货留存。";
   if (message.includes("Nobody is waiting next")) return "目前没有下一棒，暂时不能发货。";
   if (message.includes("Shipping record already exists")) return "发货留存已经提交过了。";
+  if (message.includes("Fee first")) return "请先填写发货邮费，再提交发货留存。";
+  if (message.includes("Receive first")) return "请先提交收货留存。";
   return "提交留存失败。";
 }
 
@@ -43,7 +46,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const input = body as Record<string, unknown>;
     const action = input.action;
     const date = input.date;
-    const photoUrl = input.photo_url;
+    const photoUrls = input.photo_urls;
     const note = cleanNote(input.note);
 
     if (action !== "received" && action !== "shipped") {
@@ -52,7 +55,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (typeof date !== "string" || !DATE_RE.test(date)) {
       return NextResponse.json({ error: "请选择日期。" }, { status: 400 });
     }
-    if (typeof photoUrl !== "string" || !/^https:\/\//i.test(photoUrl)) {
+    if (!Array.isArray(photoUrls) || photoUrls.length < 1 || photoUrls.length > 12 ||
+      !photoUrls.every((url) => isUploadedImageUrl(url, action, user.id))) {
       return NextResponse.json({ error: "请先上传留存图片。" }, { status: 400 });
     }
     if (note === null) {
@@ -62,24 +66,25 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const db = getSupabaseAdmin();
 
     if (action === "received") {
-      const { error } = await db.rpc("mark_puzzle_received", {
+      const { error } = await db.rpc("v03_receive", {
         p_puzzle_id: id,
         p_user_id: user.id,
-        p_received_on: date,
-        p_received_photo_url: photoUrl,
-        p_receiving_note: note,
+        p_date: date,
+        p_urls: photoUrls,
+        p_note: note,
       });
 
       if (error) return NextResponse.json({ error: friendlyRpcError(error.message) }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
 
-    const { data, error } = await db.rpc("mark_puzzle_shipped", {
+    const { data, error } = await db.rpc("v03_ship", {
       p_puzzle_id: id,
       p_user_id: user.id,
-      p_shipped_on: date,
-      p_shipping_photo_url: photoUrl,
-      p_shipping_note: note,
+      p_date: date,
+      p_urls: photoUrls,
+      p_note: note,
+      p_return: input.return_home === true,
     });
 
     if (error) return NextResponse.json({ error: friendlyRpcError(error.message) }, { status: 400 });

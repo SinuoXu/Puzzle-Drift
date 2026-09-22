@@ -7,14 +7,18 @@ import { Avatar } from "@/components/Avatar";
 import { NewPuzzleModal } from "@/components/NewPuzzleModal";
 import { PuzzleCard } from "@/components/PuzzleCard";
 import { PuzzleDetailModal } from "@/components/PuzzleDetailModal";
+import { ProfilePanel } from "@/components/ProfilePanel";
+import { TasksPanel } from "@/components/TasksPanel";
+import { UserProfileModal } from "@/components/UserProfileModal";
 import { getRealtimeClient } from "@/lib/realtime-client";
 import type { Puzzle, Snapshot, User } from "@/lib/types";
 
-type Tab = "feed" | "library" | "mine";
-type LibraryFilter = "all" | "drifting" | "idle" | "open";
+type Tab = "tasks" | "feed" | "library" | "mine";
+type LibraryFilter = "all" | "drifting" | "idle" | "retired";
 
 function LoginScreen({ onLogin }: { onLogin: (user: User) => Promise<void> }) {
   const [username, setUsername] = useState("");
+  const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -28,7 +32,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: User) => Promise<void> }) {
       const response = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
+        body: JSON.stringify({ username, pin }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? "进入失败。");
@@ -60,12 +64,13 @@ function LoginScreen({ onLogin }: { onLogin: (user: User) => Promise<void> }) {
               placeholder="例如：nono"
             />
           </label>
-          <button className="primaryButton largeButton" type="submit" disabled={busy || !username.trim()}>
+          <label><span>6 位数字 PIN</span><input type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={pin} onChange={(event) => setPin(event.target.value)} placeholder="6 位数字" /></label>
+          <button className="primaryButton largeButton" type="submit" disabled={busy || !username.trim() || pin.length !== 6}>
             {busy ? "进入中…" : "进入 Puzzle Drift"}
           </button>
         </form>
 
-        <p className="loginHint">同一浏览器会记住你一年。这个版本没有密码，因此用户名只适合熟人内部使用。</p>
+        <p className="loginHint">同一浏览器会记住你一年。旧账号请在已登录的原设备设置 PIN。</p>
         {error && <div className="errorBox">{error}</div>}
       </section>
     </main>
@@ -89,11 +94,14 @@ export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [tab, setTab] = useState<Tab>("feed");
   const [selectedPuzzleId, setSelectedPuzzleId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [showNewPuzzle, setShowNewPuzzle] = useState(false);
   const [search, setSearch] = useState("");
   const [brand, setBrand] = useState("all");
+  const [owner, setOwner] = useState("all");
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
   const [globalError, setGlobalError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   const loadSnapshot = useCallback(async (silent = false) => {
@@ -107,6 +115,7 @@ export default function Home() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? "读取数据失败。");
       setSnapshot(data as Snapshot);
+      setRefreshKey((value) => value + 1);
       if (!silent) setGlobalError("");
     } catch (err) {
       if (!silent) setGlobalError(err instanceof Error ? err.message : "读取数据失败。");
@@ -186,13 +195,14 @@ export default function Home() {
 
     return snapshot.puzzles.filter((puzzle) => {
       if (brand !== "all" && puzzle.brand !== brand) return false;
+      if (owner !== "all" && puzzle.owner_id !== owner) return false;
       if (libraryFilter === "drifting" && puzzle.drift_state !== "drifting") return false;
-      if (libraryFilter === "idle" && puzzle.drift_state === "drifting") return false;
-      if (libraryFilter === "open" && puzzle.availability !== "active") return false;
+      if (libraryFilter === "idle" && puzzle.drift_state !== "idle") return false;
+      if (libraryFilter === "retired" && puzzle.drift_state !== "retired") return false;
       if (keyword && !`${puzzle.name} ${puzzle.brand}`.toLowerCase().includes(keyword)) return false;
       return true;
     });
-  }, [snapshot, search, brand, libraryFilter]);
+  }, [snapshot, search, brand, owner, libraryFilter]);
 
   if (booting) {
     return (
@@ -230,13 +240,14 @@ export default function Home() {
         </button>
 
         <nav className="desktopTabs" aria-label="主导航">
+          <button className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>我的待办</button>
           <button className={tab === "feed" ? "active" : ""} onClick={() => setTab("feed")}>消息中心</button>
           <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>漂流中心</button>
           <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>个人中心</button>
         </nav>
 
         <div className="userChip">
-          <Avatar name={user.username} size={32} />
+          <Avatar name={user.username} url={user.avatar_url} size={32} onOpen={() => setSelectedUserId(user.id)} />
           <div>
             <strong>{user.username}</strong>
             <small>{user.is_admin ? "管理员" : "成员"}</small>
@@ -246,6 +257,7 @@ export default function Home() {
       </header>
 
       <nav className="mobileTabs" aria-label="移动端导航">
+        <button className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>待办</button>
         <button className={tab === "feed" ? "active" : ""} onClick={() => setTab("feed")}>消息</button>
         <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>图库</button>
         <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>我的</button>
@@ -253,18 +265,18 @@ export default function Home() {
 
       <div className="appContent">
         {globalError && <div className="errorBox globalError">{globalError}</div>}
+        {tab === "tasks" && <TasksPanel refreshKey={refreshKey} onOpenPuzzle={setSelectedPuzzleId} onChanged={mutationCompleted} />}
 
         {tab === "feed" && (
           <section>
             <SectionTitle
               title="消息中心"
               subtitle="新图、排队、收货和发货都会自动同步到这里。"
-              action={<button className="primaryButton" type="button" onClick={() => setShowNewPuzzle(true)}>＋ 发布拼图</button>}
             />
 
             <div className="feedLayout">
               <div>
-                <ActivityFeed activities={activities} onOpenPuzzle={setSelectedPuzzleId} />
+                <ActivityFeed activities={activities} onOpenPuzzle={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />
               </div>
               <aside className="sidebarCard">
                 <p className="eyebrow">实时状态</p>
@@ -284,7 +296,6 @@ export default function Home() {
             <SectionTitle
               title="漂流中心"
               subtitle="所有人的拼图都在同一个图库里。"
-              action={<button className="primaryButton" type="button" onClick={() => setShowNewPuzzle(true)}>＋ 发布拼图</button>}
             />
 
             <div className="filterBar">
@@ -293,17 +304,18 @@ export default function Home() {
                 <option value="all">全部状态</option>
                 <option value="drifting">正在漂</option>
                 <option value="idle">目前没在漂</option>
-                <option value="open">开放排队</option>
+                <option value="retired">退役</option>
               </select>
               <select value={brand} onChange={(event) => setBrand(event.target.value)}>
                 <option value="all">全部品牌</option>
                 {brands.map((item) => <option value={item} key={item}>{item}</option>)}
               </select>
+              <select value={owner} onChange={(event) => setOwner(event.target.value)}><option value="all">全部图主</option>{Array.from(new Map(puzzles.map((p) => [p.owner_id, p.owner_name])).entries()).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
             </div>
 
             {filteredPuzzles.length > 0 ? (
               <div className="puzzleGrid">
-                {filteredPuzzles.map((puzzle) => <PuzzleCard key={puzzle.id} puzzle={puzzle} onOpen={setSelectedPuzzleId} />)}
+                {filteredPuzzles.map((puzzle) => <PuzzleCard key={puzzle.id} puzzle={puzzle} onOpen={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />)}
               </div>
             ) : (
               <div className="emptyPanel">没有找到符合条件的拼图。</div>
@@ -320,18 +332,22 @@ export default function Home() {
             />
 
             <div className="mySection">
+              <ProfilePanel user={user} onChanged={mutationCompleted} />
+            </div>
+
+            <div className="mySection">
               <div className="subHeading"><h3>我的拼图</h3><span>{myOwned.length}</span></div>
-              {myOwned.length > 0 ? <div className="puzzleGrid compactGrid">{myOwned.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} />)}</div> : <div className="emptyPanel smallEmpty">你还没有发布拼图。</div>}
+              {myOwned.length > 0 ? <div className="puzzleGrid compactGrid">{myOwned.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />)}</div> : <div className="emptyPanel smallEmpty">你还没有发布拼图。</div>}
             </div>
 
             <div className="mySection">
               <div className="subHeading"><h3>我正在持有</h3><span>{myHolding.length}</span></div>
-              {myHolding.length > 0 ? <div className="puzzleGrid compactGrid">{myHolding.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} />)}</div> : <div className="emptyPanel smallEmpty">目前没有别人的拼图在你手里。</div>}
+              {myHolding.length > 0 ? <div className="puzzleGrid compactGrid">{myHolding.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />)}</div> : <div className="emptyPanel smallEmpty">目前没有别人的拼图在你手里。</div>}
             </div>
 
             <div className="mySection">
               <div className="subHeading"><h3>我的排队</h3><span>{myQueued.length}</span></div>
-              {myQueued.length > 0 ? <div className="puzzleGrid compactGrid">{myQueued.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} />)}</div> : <div className="emptyPanel smallEmpty">你还没有排队。</div>}
+              {myQueued.length > 0 ? <div className="puzzleGrid compactGrid">{myQueued.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />)}</div> : <div className="emptyPanel smallEmpty">你还没有排队。</div>}
             </div>
           </section>
         )}
@@ -350,8 +366,10 @@ export default function Home() {
           currentUser={user}
           onClose={() => setSelectedPuzzleId(null)}
           onChanged={mutationCompleted}
+          onOpenUser={setSelectedUserId}
         />
       )}
+      {selectedUserId && <UserProfileModal userId={selectedUserId} onClose={() => setSelectedUserId(null)} />}
     </main>
   );
 }

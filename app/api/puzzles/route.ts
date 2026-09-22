@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { isUploadedImageUrl } from "@/lib/image-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
     if (descriptionInput === null) return NextResponse.json({ error: "介绍最多 1000 字。" }, { status: 400 });
     const brand = brandInput ?? "";
     const description = descriptionInput ?? "";
-    if (!coverUrl || !/^https:\/\//i.test(coverUrl)) {
+    if (!coverUrl || !isUploadedImageUrl(coverUrl, "cover", user.id)) {
       return NextResponse.json({ error: "请先上传封面图。" }, { status: 400 });
     }
 
