@@ -6,6 +6,8 @@ create extension if not exists pgcrypto;
 alter table public.app_users add column if not exists pin_hash text;
 alter table public.app_users add column if not exists pin_failed_count integer not null default 0;
 alter table public.app_users add column if not exists pin_locked_until timestamptz;
+alter table public.app_users add column if not exists session_version integer not null default 1;
+alter table public.app_sessions add column if not exists session_version integer not null default 1;
 alter table public.app_users add column if not exists shipping_address text;
 alter table public.app_users add column if not exists payment_qr_url text;
 update public.app_users set is_admin = true where username_normalized = 'nono';
@@ -27,6 +29,23 @@ create or replace function public.v03_pin_succeeded(p_user_id uuid)
 returns void language plpgsql security definer set search_path=public as $$
 begin
   update public.app_users set pin_failed_count=0,pin_locked_until=null where id=p_user_id;
+end $$;
+
+create or replace function public.v03_claim_pin(p_user_id uuid, p_hash text)
+returns boolean language plpgsql security definer set search_path=public as $$
+begin
+  update public.app_users set pin_hash=p_hash,pin_failed_count=0,pin_locked_until=null,session_version=session_version+1
+  where id=p_user_id and pin_hash is null;
+  if not found then return false; end if;
+  return true;
+end $$;
+
+create or replace function public.v03_reset_pin(p_user_id uuid, p_hash text)
+returns boolean language plpgsql security definer set search_path=public as $$
+begin
+  update public.app_users set pin_hash=p_hash,pin_failed_count=0,pin_locked_until=null,session_version=session_version+1 where id=p_user_id;
+  if not found then return false; end if;
+  return true;
 end $$;
 
 alter table public.puzzles add column if not exists in_transit boolean not null default false;
@@ -330,5 +349,5 @@ begin
   return new;
 end $$;
 
-revoke all on function public.v03_join_queue(uuid,uuid), public.v03_receive(uuid,uuid,date,jsonb,text), public.v03_ship(uuid,uuid,date,jsonb,text,boolean), public.v03_fee(uuid,uuid,integer,text,text,boolean), public.v03_mark_paid(uuid,uuid), public.v03_prepare_return(uuid,uuid), public.v03_cancel_queue(uuid,uuid), public.v03_move_queue(uuid,uuid,integer), public.v03_handoff(uuid,uuid,boolean), public.v03_pin_failed(uuid), public.v03_pin_succeeded(uuid) from public, anon, authenticated;
-grant execute on function public.v03_join_queue(uuid,uuid), public.v03_receive(uuid,uuid,date,jsonb,text), public.v03_ship(uuid,uuid,date,jsonb,text,boolean), public.v03_fee(uuid,uuid,integer,text,text,boolean), public.v03_mark_paid(uuid,uuid), public.v03_prepare_return(uuid,uuid), public.v03_cancel_queue(uuid,uuid), public.v03_move_queue(uuid,uuid,integer), public.v03_handoff(uuid,uuid,boolean), public.v03_pin_failed(uuid), public.v03_pin_succeeded(uuid) to service_role;
+revoke all on function public.v03_join_queue(uuid,uuid), public.v03_receive(uuid,uuid,date,jsonb,text), public.v03_ship(uuid,uuid,date,jsonb,text,boolean), public.v03_fee(uuid,uuid,integer,text,text,boolean), public.v03_mark_paid(uuid,uuid), public.v03_prepare_return(uuid,uuid), public.v03_cancel_queue(uuid,uuid), public.v03_move_queue(uuid,uuid,integer), public.v03_handoff(uuid,uuid,boolean), public.v03_pin_failed(uuid), public.v03_pin_succeeded(uuid), public.v03_claim_pin(uuid,text), public.v03_reset_pin(uuid,text) from public, anon, authenticated;
+grant execute on function public.v03_join_queue(uuid,uuid), public.v03_receive(uuid,uuid,date,jsonb,text), public.v03_ship(uuid,uuid,date,jsonb,text,boolean), public.v03_fee(uuid,uuid,integer,text,text,boolean), public.v03_mark_paid(uuid,uuid), public.v03_prepare_return(uuid,uuid), public.v03_cancel_queue(uuid,uuid), public.v03_move_queue(uuid,uuid,integer), public.v03_handoff(uuid,uuid,boolean), public.v03_pin_failed(uuid), public.v03_pin_succeeded(uuid), public.v03_claim_pin(uuid,text), public.v03_reset_pin(uuid,text) to service_role;

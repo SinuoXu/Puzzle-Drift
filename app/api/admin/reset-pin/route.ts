@@ -15,8 +15,7 @@ export async function POST(request: NextRequest) {
   const { data: target, error: lookupError } = await db.from("app_users").select("id").eq("username_normalized", username).maybeSingle();
   if (lookupError || !target) return NextResponse.json({ error: "找不到该用户。" }, { status: 404 });
   const pin = randomInt(0, 1_000_000).toString().padStart(6, "0");
-  const { error } = await db.from("app_users").update({ pin_hash: await hash(pin, 12), pin_failed_count: 0, pin_locked_until: null }).eq("id", target.id);
-  if (error) return NextResponse.json({ error: "重置失败。" }, { status: 500 });
-  await db.from("app_sessions").delete().eq("user_id", target.id);
+  const { data: reset, error } = await db.rpc("v03_reset_pin", { p_user_id: target.id, p_hash: await hash(pin, 12) });
+  if (error || !reset) return NextResponse.json({ error: "重置失败。" }, { status: 500 });
   return NextResponse.json({ pin }, { headers: { "Cache-Control": "no-store" } });
 }

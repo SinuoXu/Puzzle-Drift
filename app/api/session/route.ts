@@ -105,10 +105,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "PIN 尝试过多，请 15 分钟后再试。" }, { status: 429 });
       }
       if (!(await compare(pin, user.pin_hash))) {
-        await db.rpc("v03_pin_failed", { p_user_id: user.id });
+        const { error: failedError } = await db.rpc("v03_pin_failed", { p_user_id: user.id });
+        if (failedError) throw new Error(failedError.message);
         return NextResponse.json({ error: "用户名或 PIN 不正确。" }, { status: 401 });
       }
-      await db.rpc("v03_pin_succeeded", { p_user_id: user.id });
+      const { error: successError } = await db.rpc("v03_pin_succeeded", { p_user_id: user.id });
+      if (successError) throw new Error(successError.message);
     } else {
       // v0.2 accounts had no authentication. Claiming requires an existing session;
       // this prevents username-only takeovers during the migration.
@@ -116,9 +118,11 @@ export async function POST(request: NextRequest) {
       if (existingSession?.id !== user.id) {
         return NextResponse.json({ error: "旧账号请先在原设备打开网站设置 PIN；若已换设备，请联系管理员恢复。" }, { status: 403 });
       }
-      const { error: claimError } = await db.from("app_users")
-        .update({ pin_hash: await hash(pin, 12) }).eq("id", user.id).is("pin_hash", null);
+      const { data: claimed, error: claimError } = await db.rpc("v03_claim_pin", {
+        p_user_id: user.id, p_hash: await hash(pin, 12),
+      });
       if (claimError) throw new Error(claimError.message);
+      if (!claimed) return NextResponse.json({ error: "PIN 已在其他设备设置，请重新登录。" }, { status: 409 });
     }
 
     // Ensure the reserved username "nono" is always marked as admin.
@@ -172,8 +176,9 @@ export async function PATCH(request: NextRequest) {
   const { data: existing, error: readError } = await db.from("app_users").select("pin_hash").eq("id", user.id).single();
   if (readError) return NextResponse.json({ error: "读取账号失败。" }, { status: 500 });
   if (existing.pin_hash) return NextResponse.json({ error: "PIN 已设置。如需重置，请联系管理员。" }, { status: 409 });
-  const { data, error } = await db.from("app_users").update({ pin_hash: await hash(body.pin, 12) })
-    .eq("id", user.id).is("pin_hash", null).select("id").maybeSingle();
+  const { data, error } = await db.rpc("v03_claim_pin", { p_user_id: user.id, p_hash: await hash(body.pin, 12) });
   if (error || !data) return NextResponse.json({ error: "设置 PIN 失败。" }, { status: 409 });
+  const { token, expiresAt } = await createSession(user.id);
+  await setSessionCookie(token, expiresAt);
   return NextResponse.json({ ok: true });
 }
