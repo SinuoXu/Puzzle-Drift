@@ -50,11 +50,23 @@ export function PuzzleDetailModal({
   const [feeAmount, setFeeAmount] = useState("");
   const [tracking, setTracking] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [feeDestination, setFeeDestination] = useState<{ username: string; shipping_address: string | null } | null>(null);
 
   useEffect(() => {
     void fetch(`/api/puzzles/${puzzle.id}/history`, { cache: "no-store" }).then((r) => r.json())
       .then((data) => { setHistory(Object.fromEntries((data.history ?? []).map((row: { id: string }) => [row.id, row]))); setHandoffs(data.handoffs ?? []); });
   }, [puzzle.id, puzzle.updated_at]);
+
+  useEffect(() => {
+    if (!feeOpen) return;
+    setFeeDestination(null);
+    void fetch("/api/tasks", { cache: "no-store" }).then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "读取地址失败。");
+      const task = (data.tasks ?? []).find((row: { puzzle_id: string; kind: string }) => row.puzzle_id === puzzle.id && row.kind === "shipping_fee");
+      setFeeDestination(task?.destination ?? null);
+    }).catch((err) => setError(err instanceof Error ? err.message : "读取地址失败。"));
+  }, [feeOpen, puzzle.id]);
 
   const activeJourney = puzzle.journey.filter((row) => row.status !== "cancelled");
   const myWaiting = puzzle.journey.find((row) => row.user_id === currentUser.id && row.status === "waiting");
@@ -73,8 +85,7 @@ export function PuzzleDetailModal({
 
   const summary = useMemo(() => {
     if (puzzle.availability === "retired") return "退役";
-    if (puzzle.drift_state === "drifting") return puzzle.in_transit ? "正在漂 · 运输中" : "正在漂";
-    return "目前没在漂";
+    return puzzle.in_transit ? "正在漂 · 运输中" : "正在漂";
   }, [puzzle]);
 
   async function call(url: string, init: RequestInit) {
@@ -255,6 +266,7 @@ export function PuzzleDetailModal({
 
         {feeOpen && <form className="retentionPanel" onSubmit={submitFee}>
           <h3>{returnHome ? "回家邮费" : "发货邮费"}</h3>
+          <div className="destinationBox"><strong>收件人：{feeDestination?.username ?? "正在读取…"}</strong><p>{feeDestination?.shipping_address ?? "地址尚未填写，请先联系收件人。"}</p>{feeDestination?.shipping_address && <button type="button" className="secondaryButton" onClick={() => void navigator.clipboard.writeText(feeDestination.shipping_address ?? "")}>复制地址</button>}</div>
           <label><span>金额（元）*</span><input type="number" min="0.01" step="0.01" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} required /></label>
           <label><span>运单号（选填）</span><input maxLength={120} value={tracking} onChange={(e) => setTracking(e.target.value)} /></label>
           <label><span>运费截图（选填）</span><input type="file" accept="image/*" onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)} /></label>

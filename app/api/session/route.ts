@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     let { data: user, error: findError } = await db
       .from("app_users")
-      .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until")
+      .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until, profile_required")
       .eq("username_normalized", parsed.normalized)
       .maybeSingle();
 
@@ -78,14 +78,15 @@ export async function POST(request: NextRequest) {
           username_normalized: parsed.normalized,
           is_admin: parsed.normalized === "nono",
           pin_hash: await hash(pin, 12),
+          profile_required: true,
         })
-        .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until")
+        .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until, profile_required")
         .single();
 
       if (createError && createError.code === "23505") {
         const { data: existingUser, error: retryError } = await db
           .from("app_users")
-          .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until")
+          .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until, profile_required")
           .eq("username_normalized", parsed.normalized)
           .single();
 
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
         .from("app_users")
         .update({ is_admin: true })
         .eq("id", user.id)
-        .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until")
+        .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until, profile_required")
         .single();
 
       if (promoteError) throw new Error(promoteError.message);
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
         username: user.username,
         avatar_url: user.avatar_url ?? null,
         is_admin: Boolean(user.is_admin),
+        profile_required: Boolean(user.profile_required),
       },
     });
   } catch (error) {

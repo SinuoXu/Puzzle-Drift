@@ -3,6 +3,7 @@ export type User = {
   username: string;
   avatar_url: string | null;
   is_admin: boolean;
+  profile_required: boolean;
 };
 
 export type JourneyEntry = {
@@ -32,7 +33,7 @@ export type Puzzle = {
   availability: "active" | "paused" | "retired";
   created_at: string;
   updated_at: string;
-  drift_state: "idle" | "drifting" | "retired";
+  drift_state: "drifting" | "retired";
   in_transit: boolean;
   waiting_count: number;
   journey: JourneyEntry[];

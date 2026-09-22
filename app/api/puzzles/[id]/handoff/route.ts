@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
+  const user = await getReadyUser();
   if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
   const { id } = await context.params;
   const input = await request.json().catch(() => ({}));

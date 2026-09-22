@@ -1,12 +1,12 @@
 import { randomInt } from "node:crypto";
 import { hash } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
-  const admin = await getCurrentUser();
+  const admin = await getReadyUser();
   if (!admin?.is_admin) return NextResponse.json({ error: "无权操作。" }, { status: 403 });
   const input = await request.json().catch(() => null);
   const username = typeof input?.username === "string" ? input.username.normalize("NFKC").trim().toLowerCase() : "";

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 export async function GET() {
-  const user = await getCurrentUser();
+  const user = await getReadyUser();
   if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
   const db = getSupabaseAdmin();
   const { data: tasks, error } = await db.from("puzzle_tasks")
@@ -40,7 +40,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getReadyUser();
   if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
   const input = await request.json().catch(() => null);
   if (!input || typeof input.id !== "string") return NextResponse.json({ error: "无效待办。" }, { status: 400 });

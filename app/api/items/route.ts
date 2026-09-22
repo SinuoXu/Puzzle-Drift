@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ function cleanContent(value: unknown): string | null {
 
 export async function GET() {
   try {
-    const currentUser = await getCurrentUser();
+    const currentUser = await getReadyUser();
     if (!currentUser) {
       return NextResponse.json({ error: "未登录。" }, { status: 401 });
     }
@@ -66,7 +66,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUser();
+    const currentUser = await getReadyUser();
     if (!currentUser) {
       return NextResponse.json({ error: "未登录。" }, { status: 401 });
     }
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUser();
+    const currentUser = await getReadyUser();
     if (!currentUser) {
       return NextResponse.json({ error: "未登录。" }, { status: 401 });
     }

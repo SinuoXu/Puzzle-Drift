@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { isUploadedImageUrl } from "@/lib/image-url";
 
@@ -17,7 +17,7 @@ function cleanText(value: unknown, max: number, required = false): string | null
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
+    const user = await getReadyUser();
     if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
 
     let body: unknown;

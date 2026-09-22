@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ function cleanText(value: unknown, max: number): string | null {
 }
 
 async function canManagePuzzle(id: string) {
-  const user = await getCurrentUser();
+  const user = await getReadyUser();
   if (!user) return { user: null, puzzle: null };
 
   const db = getSupabaseAdmin();
