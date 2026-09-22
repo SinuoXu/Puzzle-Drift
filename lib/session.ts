@@ -10,6 +10,7 @@ export type AppUser = {
   username: string;
   avatar_url: string | null;
   is_admin: boolean;
+  profile_required: boolean;
 };
 
 function hashToken(token: string): string {
@@ -73,7 +74,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 
   const { data: user, error: userError } = await db
     .from("app_users")
-    .select("id, username, avatar_url, is_admin, session_version")
+    .select("id, username, avatar_url, is_admin, profile_required, session_version")
     .eq("id", session.user_id)
     .maybeSingle();
 
@@ -86,6 +87,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     username: user.username,
     avatar_url: user.avatar_url ?? null,
     is_admin: Boolean(user.is_admin),
+    profile_required: Boolean(user.profile_required),
   };
 }
 
@@ -105,4 +107,9 @@ export async function destroyCurrentSession(): Promise<void> {
     path: "/",
     expires: new Date(0),
   });
+}
+
+export async function getReadyUser(): Promise<AppUser | null> {
+  const user = await getCurrentUser();
+  return user && !user.profile_required ? user : null;
 }

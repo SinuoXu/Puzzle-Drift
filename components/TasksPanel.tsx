@@ -8,7 +8,19 @@ const labels: Record<string, string> = { receive: "收货留存", ship: "发货�
 export function TasksPanel({ refreshKey, onOpenPuzzle, onChanged }: { refreshKey: number; onOpenPuzzle: (id: string) => void; onChanged: () => Promise<void> }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState("");
-  useEffect(() => { void fetch("/api/tasks", { cache: "no-store" }).then((r) => r.json()).then((d) => setTasks(d.tasks ?? [])); }, [refreshKey]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void fetch("/api/tasks", { cache: "no-store" }).then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "读取待办失败。");
+      return data.tasks as Task[];
+    }).then((rows) => { if (active) { setTasks(rows ?? []); setError(""); } })
+      .catch((err) => { if (active) setError(err instanceof Error ? err.message : "读取待办失败。"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [refreshKey]);
   async function paid(id: string) {
     const response = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
     if (!response.ok) { setError("标记支付失败。"); return; }
@@ -17,7 +29,8 @@ export function TasksPanel({ refreshKey, onOpenPuzzle, onChanged }: { refreshKey
   }
   return <section><h2>我的待办 <small>({tasks.length})</small></h2>
     {error && <div className="errorBox">{error}</div>}
-    {tasks.length === 0 && <div className="emptyPanel">目前没有待办。</div>}
+    {loading && <div className="emptyPanel">正在读取待办…</div>}
+    {!loading && !error && tasks.length === 0 && <div className="emptyPanel">目前没有待办。</div>}
     <div className="taskList">{tasks.map((task) => <article className="sidebarCard" key={task.id}>
       <h3>{labels[task.kind] ?? task.kind} · {task.puzzle_name}</h3>
       {task.destination && <div><p>寄给：{task.destination.username}</p><p>{task.destination.shipping_address || "对方还没有填写地址"}</p><button className="secondaryButton" onClick={() => void navigator.clipboard.writeText(task.destination?.shipping_address ?? "")}>复制地址</button></div>}

@@ -12,6 +12,8 @@ export async function GET() {
       return NextResponse.json({ error: "未登录。" }, { status: 401 });
     }
 
+    if (currentUser.profile_required) return NextResponse.json({ error: "请先完成个人资料。", needs_profile: true, user: currentUser }, { status: 403 });
+
     const db = getSupabaseAdmin();
 
     const [usersResult, puzzlesResult, journeyResult, activityResult] = await Promise.all([
@@ -56,8 +58,7 @@ export async function GET() {
       const rawJourney = journeyByPuzzle.get(puzzle.id) ?? [];
       const waitingCount = rawJourney.filter((entry) => entry.status === "waiting").length;
 
-      const driftState = puzzle.availability === "retired" ? "retired" :
-        waitingCount > 0 || puzzle.in_transit ? "drifting" : "idle";
+      const driftState = puzzle.availability === "retired" ? "retired" : "drifting";
 
       return {
         ...puzzle,

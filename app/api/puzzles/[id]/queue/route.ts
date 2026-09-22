@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function POST(_request: NextRequest, context: { params: Promise<{ i
     const { id } = await context.params;
     if (!UUID_RE.test(id)) return NextResponse.json({ error: "无效的拼图 ID。" }, { status: 400 });
 
-    const user = await getCurrentUser();
+    const user = await getReadyUser();
     if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
 
     const db = getSupabaseAdmin();
@@ -42,7 +42,7 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
     const { id } = await context.params;
     if (!UUID_RE.test(id)) return NextResponse.json({ error: "无效的拼图 ID。" }, { status: 400 });
 
-    const user = await getCurrentUser();
+    const user = await getReadyUser();
     if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
 
     const db = getSupabaseAdmin();
@@ -62,7 +62,7 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
+  const user = await getReadyUser();
   if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
   const { id } = await context.params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: "无效的拼图 ID。" }, { status: 400 });

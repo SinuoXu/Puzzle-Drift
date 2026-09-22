@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { Avatar } from "@/components/Avatar";
+import { OnboardingPanel } from "@/components/OnboardingPanel";
 import { NewPuzzleModal } from "@/components/NewPuzzleModal";
 import { PuzzleCard } from "@/components/PuzzleCard";
 import { PuzzleDetailModal } from "@/components/PuzzleDetailModal";
@@ -14,7 +15,7 @@ import { getRealtimeClient } from "@/lib/realtime-client";
 import type { Puzzle, Snapshot, User } from "@/lib/types";
 
 type Tab = "tasks" | "feed" | "library" | "mine";
-type LibraryFilter = "all" | "drifting" | "idle" | "retired";
+type LibraryFilter = "all" | "drifting" | "retired";
 
 function LoginScreen({ onLogin }: { onLogin: (user: User) => Promise<void> }) {
   const [username, setUsername] = useState("");
@@ -96,6 +97,8 @@ export default function Home() {
   const [selectedPuzzleId, setSelectedPuzzleId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [showNewPuzzle, setShowNewPuzzle] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [onboardingUser, setOnboardingUser] = useState<User | null>(null);
   const [search, setSearch] = useState("");
   const [brand, setBrand] = useState("all");
   const [owner, setOwner] = useState("all");
@@ -109,11 +112,14 @@ export default function Home() {
       const response = await fetch("/api/snapshot", { cache: "no-store" });
       if (response.status === 401) {
         setSnapshot(null);
+        setOnboardingUser(null);
         return;
       }
 
       const data = await response.json().catch(() => ({}));
+      if (response.status === 403 && data.needs_profile) { setOnboardingUser(data.user as User); setSnapshot(null); return; }
       if (!response.ok) throw new Error(data.error ?? "读取数据失败。");
+      setOnboardingUser(null);
       setSnapshot(data as Snapshot);
       setRefreshKey((value) => value + 1);
       if (!silent) setGlobalError("");
@@ -197,7 +203,6 @@ export default function Home() {
       if (brand !== "all" && puzzle.brand !== brand) return false;
       if (owner !== "all" && puzzle.owner_id !== owner) return false;
       if (libraryFilter === "drifting" && puzzle.drift_state !== "drifting") return false;
-      if (libraryFilter === "idle" && puzzle.drift_state !== "idle") return false;
       if (libraryFilter === "retired" && puzzle.drift_state !== "retired") return false;
       if (keyword && !`${puzzle.name} ${puzzle.brand}`.toLowerCase().includes(keyword)) return false;
       return true;
@@ -211,6 +216,10 @@ export default function Home() {
         <span>Puzzle Drift</span>
       </main>
     );
+  }
+
+  if (onboardingUser) {
+    return <OnboardingPanel user={onboardingUser} onCompleted={() => loadSnapshot()} onLogout={async () => { await fetch("/api/session", { method: "DELETE" }); setOnboardingUser(null); }} />;
   }
 
   if (!snapshot) {
@@ -303,7 +312,6 @@ export default function Home() {
               <select value={libraryFilter} onChange={(event) => setLibraryFilter(event.target.value as LibraryFilter)}>
                 <option value="all">全部状态</option>
                 <option value="drifting">正在漂</option>
-                <option value="idle">目前没在漂</option>
                 <option value="retired">退役</option>
               </select>
               <select value={brand} onChange={(event) => setBrand(event.target.value)}>
@@ -331,9 +339,7 @@ export default function Home() {
               action={<button className="primaryButton" type="button" onClick={() => setShowNewPuzzle(true)}>＋ 上传我的拼图</button>}
             />
 
-            <div className="mySection">
-              <ProfilePanel user={user} onChanged={mutationCompleted} />
-            </div>
+            <div className="mySection"><button className="secondaryButton" type="button" onClick={() => setShowProfile(true)}>设置我的资料</button></div>
 
             <div className="mySection">
               <div className="subHeading"><h3>我的拼图</h3><span>{myOwned.length}</span></div>
@@ -352,6 +358,8 @@ export default function Home() {
           </section>
         )}
       </div>
+
+      {showProfile && <div className="modalBackdrop" onClick={() => setShowProfile(false)}><div className="modalCard profileModal" onClick={(event) => event.stopPropagation()}><button type="button" className="iconButton" onClick={() => setShowProfile(false)} aria-label="关闭">×</button><ProfilePanel user={user} onChanged={mutationCompleted} /></div></div>}
 
       {showNewPuzzle && (
         <NewPuzzleModal

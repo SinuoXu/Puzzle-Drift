@@ -5,8 +5,7 @@ import { Avatar } from "@/components/Avatar";
 
 function stateLabel(puzzle: Puzzle) {
   if (puzzle.availability === "retired") return { text: "退役", cls: "statusMuted" };
-  if (puzzle.drift_state === "drifting") return { text: "正在漂", cls: "statusGreen" };
-  return { text: "目前没在漂", cls: "statusMuted" };
+  return { text: "正在漂", cls: "statusGreen" };
 }
 
 export function PuzzleCard({ puzzle, onOpen, onOpenUser }: { puzzle: Puzzle; onOpen: (id: string) => void; onOpenUser: (id: string) => void }) {
