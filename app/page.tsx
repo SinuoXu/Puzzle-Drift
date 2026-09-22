@@ -121,7 +121,6 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error ?? "读取数据失败。");
       setOnboardingUser(null);
       setSnapshot(data as Snapshot);
-      setRefreshKey((value) => value + 1);
       if (!silent) setGlobalError("");
     } catch (err) {
       if (!silent) setGlobalError(err instanceof Error ? err.message : "读取数据失败。");
@@ -139,6 +138,8 @@ export default function Home() {
     };
   }, [loadSnapshot]);
 
+  const refreshTasks = useCallback(() => setRefreshKey((value) => value + 1), []);
+
   useEffect(() => {
     if (!snapshot) return;
 
@@ -148,6 +149,7 @@ export default function Home() {
         .channel("puzzle-drift-sync")
         .on("broadcast", { event: "invalidate" }, () => {
           void loadSnapshot(true);
+          refreshTasks();
         })
         .subscribe();
       channelRef.current = channel;
@@ -159,7 +161,7 @@ export default function Home() {
     }
 
     return;
-  }, [Boolean(snapshot), loadSnapshot]);
+  }, [Boolean(snapshot), loadSnapshot, refreshTasks]);
 
   // Fallback consistency check. Realtime normally updates immediately; polling catches missed events.
   useEffect(() => {
@@ -182,8 +184,9 @@ export default function Home() {
 
   const mutationCompleted = useCallback(async () => {
     await loadSnapshot();
+    refreshTasks();
     await broadcastInvalidate();
-  }, [loadSnapshot, broadcastInvalidate]);
+  }, [loadSnapshot, refreshTasks, broadcastInvalidate]);
 
   const selectedPuzzle = useMemo(
     () => snapshot?.puzzles.find((puzzle) => puzzle.id === selectedPuzzleId) ?? null,
@@ -274,7 +277,7 @@ export default function Home() {
 
       <div className="appContent">
         {globalError && <div className="errorBox globalError">{globalError}</div>}
-        {tab === "tasks" && <TasksPanel refreshKey={refreshKey} onOpenPuzzle={setSelectedPuzzleId} onChanged={mutationCompleted} />}
+        {tab === "tasks" && <TasksPanel userId={user.id} refreshKey={refreshKey} onOpenPuzzle={setSelectedPuzzleId} onChanged={mutationCompleted} />}
 
         {tab === "feed" && (
           <section>
@@ -285,7 +288,7 @@ export default function Home() {
 
             <div className="feedLayout">
               <div>
-                <ActivityFeed activities={activities} onOpenPuzzle={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />
+                <ActivityFeed activities={activities} isAdmin={user.is_admin} onOpenPuzzle={setSelectedPuzzleId} onOpenUser={setSelectedUserId} onChanged={mutationCompleted} />
               </div>
               <aside className="sidebarCard">
                 <p className="eyebrow">实时状态</p>

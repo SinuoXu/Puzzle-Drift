@@ -152,6 +152,36 @@ export function PuzzleDetailModal({
     }
   }
 
+  async function forceEnd() {
+    if (!window.confirm(`强制结束《${puzzle.name}》？所有未完成待办和排队将被取消，拼图会显示为退役。`)) return;
+    try {
+      await call(`/api/admin/puzzles/${puzzle.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "force_end" }),
+      });
+    } catch {
+      // Error is already displayed in the modal.
+    }
+  }
+
+  async function deletePuzzle() {
+    if (!window.confirm(`删除《${puzzle.name}》？这会删除这张拼图、流转记录、待办和相关消息，不能恢复。已上传的图片会保留在 Storage 中。`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/puzzles/${puzzle.id}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "删除拼图失败。");
+      await onChanged();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除拼图失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitRetention(event: FormEvent) {
     event.preventDefault();
     if (!retentionMode || retentionFiles.length === 0 || !retentionDate) return;
@@ -381,6 +411,13 @@ export function PuzzleDetailModal({
                   <button type="submit" className="primaryButton" disabled={busy}>保存</button>
                 </div>
               </form>
+            )}
+            {currentUser.is_admin && (
+              <div className="adminDangerZone">
+                <p>管理员操作</p>
+                {puzzle.availability !== "retired" && <button type="button" className="dangerButton" disabled={busy} onClick={() => void forceEnd()}>强制结束拼图</button>}
+                <button type="button" className="dangerButton" disabled={busy} onClick={() => void deletePuzzle()}>删除拼图</button>
+              </div>
             )}
           </section>
         )}
