@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hash, compare } from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import {
   createSession,
@@ -48,35 +49,43 @@ export async function POST(request: NextRequest) {
     }
 
     const parsed = normalizeUsername((body as { username?: unknown })?.username);
+    const pin = (body as { pin?: unknown })?.pin;
     if (!parsed) {
       return NextResponse.json({ error: "用户名需要是 1–24 个字符。" }, { status: 400 });
+    }
+    if (typeof pin !== "string" || !/^\d{6}$/.test(pin)) {
+      return NextResponse.json({ error: "请输入 6 位数字 PIN。" }, { status: 400 });
     }
 
     const db = getSupabaseAdmin();
 
     let { data: user, error: findError } = await db
       .from("app_users")
-      .select("id, username, avatar_url, is_admin")
+      .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until")
       .eq("username_normalized", parsed.normalized)
       .maybeSingle();
 
     if (findError) throw new Error(findError.message);
 
     if (!user) {
+      if (parsed.normalized === "nono") {
+        return NextResponse.json({ error: "管理员账号需由已有管理员恢复。" }, { status: 403 });
+      }
       const { data: newUser, error: createError } = await db
         .from("app_users")
         .insert({
           username: parsed.username,
           username_normalized: parsed.normalized,
           is_admin: parsed.normalized === "nono",
+          pin_hash: await hash(pin, 12),
         })
-        .select("id, username, avatar_url, is_admin")
+        .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until")
         .single();
 
       if (createError && createError.code === "23505") {
         const { data: existingUser, error: retryError } = await db
           .from("app_users")
-          .select("id, username, avatar_url, is_admin")
+          .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until")
           .eq("username_normalized", parsed.normalized)
           .single();
 
@@ -91,13 +100,34 @@ export async function POST(request: NextRequest) {
 
     if (!user) throw new Error("User could not be created.");
 
+    if (user.pin_hash) {
+      if (user.pin_locked_until && new Date(user.pin_locked_until).getTime() > Date.now()) {
+        return NextResponse.json({ error: "PIN 尝试过多，请 15 分钟后再试。" }, { status: 429 });
+      }
+      if (!(await compare(pin, user.pin_hash))) {
+        await db.rpc("v03_pin_failed", { p_user_id: user.id });
+        return NextResponse.json({ error: "用户名或 PIN 不正确。" }, { status: 401 });
+      }
+      await db.rpc("v03_pin_succeeded", { p_user_id: user.id });
+    } else {
+      // v0.2 accounts had no authentication. Claiming requires an existing session;
+      // this prevents username-only takeovers during the migration.
+      const existingSession = await getCurrentUser();
+      if (existingSession?.id !== user.id) {
+        return NextResponse.json({ error: "旧账号请先在原设备打开网站设置 PIN；若已换设备，请联系管理员恢复。" }, { status: 403 });
+      }
+      const { error: claimError } = await db.from("app_users")
+        .update({ pin_hash: await hash(pin, 12) }).eq("id", user.id).is("pin_hash", null);
+      if (claimError) throw new Error(claimError.message);
+    }
+
     // Ensure the reserved username "nono" is always marked as admin.
     if (parsed.normalized === "nono" && !user.is_admin) {
       const { data: promoted, error: promoteError } = await db
         .from("app_users")
         .update({ is_admin: true })
         .eq("id", user.id)
-        .select("id, username, avatar_url, is_admin")
+        .select("id, username, avatar_url, is_admin, pin_hash, pin_failed_count, pin_locked_until")
         .single();
 
       if (promoteError) throw new Error(promoteError.message);
@@ -129,4 +159,21 @@ export async function DELETE() {
     console.error("DELETE /api/session failed", error);
     return NextResponse.json({ error: "退出失败。" }, { status: 500 });
   }
+}
+
+export async function PATCH(request: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body.pin !== "string" || !/^\d{6}$/.test(body.pin)) {
+    return NextResponse.json({ error: "请输入 6 位数字 PIN。" }, { status: 400 });
+  }
+  const db = getSupabaseAdmin();
+  const { data: existing, error: readError } = await db.from("app_users").select("pin_hash").eq("id", user.id).single();
+  if (readError) return NextResponse.json({ error: "读取账号失败。" }, { status: 500 });
+  if (existing.pin_hash) return NextResponse.json({ error: "PIN 已设置。如需重置，请联系管理员。" }, { status: 409 });
+  const { data, error } = await db.from("app_users").update({ pin_hash: await hash(body.pin, 12) })
+    .eq("id", user.id).is("pin_hash", null).select("id").maybeSingle();
+  if (error || !data) return NextResponse.json({ error: "设置 PIN 失败。" }, { status: 409 });
+  return NextResponse.json({ ok: true });
 }

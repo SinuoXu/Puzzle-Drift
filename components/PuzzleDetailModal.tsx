@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { uploadImage } from "@/lib/client-image";
 import type { Puzzle, User } from "@/lib/types";
@@ -23,11 +23,13 @@ export function PuzzleDetailModal({
   currentUser,
   onClose,
   onChanged,
+  onOpenUser,
 }: {
   puzzle: Puzzle;
   currentUser: User;
   onClose: () => void;
   onChanged: () => Promise<void>;
+  onOpenUser: (id: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -40,7 +42,19 @@ export function PuzzleDetailModal({
   const [retentionMode, setRetentionMode] = useState<"received" | "shipped" | null>(null);
   const [retentionDate, setRetentionDate] = useState(todayString());
   const [retentionNote, setRetentionNote] = useState("");
-  const [retentionFile, setRetentionFile] = useState<File | null>(null);
+  const [retentionFiles, setRetentionFiles] = useState<File[]>([]);
+  const [history, setHistory] = useState<Record<string, { received_photo_urls: string[]; receiving_note: string; shipping_photo_urls: string[]; shipping_note: string }>>({});
+  const [handoffs, setHandoffs] = useState<{ id: string; from_user_id: string; to_user_id: string; return_home: boolean; created_at: string }[]>([]);
+  const [feeOpen, setFeeOpen] = useState(false);
+  const [returnHome, setReturnHome] = useState(false);
+  const [feeAmount, setFeeAmount] = useState("");
+  const [tracking, setTracking] = useState("");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    void fetch(`/api/puzzles/${puzzle.id}/history`, { cache: "no-store" }).then((r) => r.json())
+      .then((data) => { setHistory(Object.fromEntries((data.history ?? []).map((row: { id: string }) => [row.id, row]))); setHandoffs(data.handoffs ?? []); });
+  }, [puzzle.id, puzzle.updated_at]);
 
   const activeJourney = puzzle.journey.filter((row) => row.status !== "cancelled");
   const myWaiting = puzzle.journey.find((row) => row.user_id === currentUser.id && row.status === "waiting");
@@ -54,14 +68,13 @@ export function PuzzleDetailModal({
     !puzzle.journey.some((row) => row.user_id === currentUser.id && ["waiting", "current"].includes(row.status));
 
   const canReceive = Boolean(myCurrent && !myCurrent.is_owner_start && !myCurrent.received_on);
-  const canShip = Boolean(myCurrent && nextWaiting && !myCurrent.shipped_on);
+  const canShip = Boolean(myCurrent && !myCurrent.is_owner_start && nextWaiting && myCurrent.received_on && !myCurrent.shipped_on);
+  const canReturn = Boolean(myCurrent && !myCurrent.is_owner_start && myCurrent.received_on && !nextWaiting && puzzle.availability !== "retired");
 
   const summary = useMemo(() => {
-    if (puzzle.availability === "paused") return "暂停漂流";
-    if (puzzle.availability === "retired") return "结束漂流";
-    if (puzzle.drift_state === "drifting") return `目前在 ${puzzle.current_holder_name} 手里`;
-    if (puzzle.drift_state === "waiting_to_ship") return `图主 ${puzzle.owner_name} 手里，已有下一棒`;
-    return `目前在图主 ${puzzle.owner_name} 手里`;
+    if (puzzle.availability === "retired") return "退役";
+    if (puzzle.drift_state === "drifting") return puzzle.in_transit ? "正在漂 · 运输中" : "正在漂";
+    return "目前没在漂";
   }, [puzzle]);
 
   async function call(url: string, init: RequestInit) {
@@ -96,13 +109,31 @@ export function PuzzleDetailModal({
     }
   }
 
+  async function moveQueue(direction: -1 | 1) {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/puzzles/${puzzle.id}/queue`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ direction }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "调整失败。");
+      if (!data.moved) throw new Error(direction === -1 ? "已经是排队中的第一位。" : "已经是排队中的最后一位。");
+      await onChanged();
+    } catch (error) { setError(error instanceof Error ? error.message : "调整失败。"); }
+    finally { setBusy(false); }
+  }
+
+  async function handoff(returnHome: boolean) {
+    if (!window.confirm(returnHome ? "确认已将拼图面交还给图主？此流程没有留存和邮费待办。" : "确认已将拼图面交给下一棒？此流程没有留存和邮费待办。")) return;
+    try { await call(`/api/puzzles/${puzzle.id}/handoff`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ return_home: returnHome }) }); }
+    catch { /* error shown */ }
+  }
+
   async function saveEdit(event: FormEvent) {
     event.preventDefault();
     try {
       await call(`/api/puzzles/${puzzle.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, brand, description, availability }),
+        body: JSON.stringify({ name, brand, description, ...(puzzle.availability === "retired" ? {} : { availability }) }),
       });
       setEditing(false);
     } catch {
@@ -110,39 +141,30 @@ export function PuzzleDetailModal({
     }
   }
 
-  async function deletePuzzle() {
-    if (!window.confirm(`确定删除《${puzzle.name}》吗？这会同时删除它的排队和漂流记录。`)) return;
-    try {
-      await call(`/api/puzzles/${puzzle.id}`, { method: "DELETE" });
-      onClose();
-    } catch {
-      // error already shown
-    }
-  }
-
   async function submitRetention(event: FormEvent) {
     event.preventDefault();
-    if (!retentionMode || !retentionFile || !retentionDate) return;
+    if (!retentionMode || retentionFiles.length === 0 || !retentionDate) return;
 
     setBusy(true);
     setError("");
     try {
-      const photoUrl = await uploadImage(retentionFile, retentionMode);
+      const photoUrls = await Promise.all(retentionFiles.map((file) => uploadImage(file, retentionMode)));
       const response = await fetch(`/api/puzzles/${puzzle.id}/retention`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: retentionMode,
           date: retentionDate,
-          photo_url: photoUrl,
+          photo_urls: photoUrls,
           note: retentionNote,
+          return_home: returnHome,
         }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? "提交留存失败。");
 
       setRetentionMode(null);
-      setRetentionFile(null);
+      setRetentionFiles([]);
       setRetentionNote("");
       setRetentionDate(todayString());
       await onChanged();
@@ -151,6 +173,28 @@ export function PuzzleDetailModal({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitFee(event: FormEvent) {
+    event.preventDefault();
+    if (!/^\d+(?:\.\d{1,2})?$/.test(feeAmount)) { setError("邮费最多保留两位小数。"); return; }
+    const [yuan, fen = ""] = feeAmount.split(".");
+    const amount = Number(yuan) * 100 + Number(fen.padEnd(2, "0"));
+    if (!Number.isSafeInteger(amount) || amount <= 0) { setError("请输入正确的邮费金额。"); return; }
+    setBusy(true); setError("");
+    try {
+      if (returnHome) {
+        const prepared = await fetch(`/api/puzzles/${puzzle.id}/return`, { method: "POST" });
+        if (!prepared.ok) throw new Error((await prepared.json()).error ?? "不能寄回图主。");
+      }
+      const receiptUrl = receiptFile ? await uploadImage(receiptFile, "receipt") : null;
+      const response = await fetch(`/api/puzzles/${puzzle.id}/fee`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount_cents: amount, tracking_number: tracking, receipt_url: receiptUrl, return_home: returnHome }) });
+      if (!response.ok) throw new Error((await response.json()).error ?? "填写邮费失败。");
+      setFeeOpen(false); setFeeAmount(""); setTracking(""); setReceiptFile(null);
+      await onChanged();
+    } catch (error) { setError(error instanceof Error ? error.message : "填写邮费失败。"); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -172,7 +216,7 @@ export function PuzzleDetailModal({
             </div>
 
             <div className="ownerLine ownerLineLarge">
-              <Avatar name={puzzle.owner_name} size={34} />
+              <Avatar name={puzzle.owner_name} url={puzzle.owner_avatar_url} size={34} onOpen={() => onOpenUser(puzzle.owner_id)} />
               <span>图主 <strong>{puzzle.owner_name}</strong></span>
             </div>
 
@@ -190,20 +234,32 @@ export function PuzzleDetailModal({
               {myWaiting && (
                 <button type="button" className="secondaryButton" disabled={busy} onClick={leaveQueue}>退出排队</button>
               )}
+              {myWaiting && <><button type="button" className="secondaryButton" disabled={busy} onClick={() => void moveQueue(-1)}>往前一位</button><button type="button" className="secondaryButton" disabled={busy} onClick={() => void moveQueue(1)}>往后一位</button></>}
               {canReceive && (
                 <button type="button" className="secondaryButton" onClick={() => setRetentionMode("received")}>上传收货留存</button>
               )}
               {canShip && (
-                <button type="button" className="primaryButton" onClick={() => setRetentionMode("shipped")}>上传发货留存并交给下一棒</button>
+                <button type="button" className="primaryButton" onClick={() => { setReturnHome(false); setRetentionMode("shipped"); }}>上传发货留存并交给下一棒</button>
               )}
-              {myCurrent && !nextWaiting && (
-                <span className="actionHint">目前没有下一棒，暂时不用发货。</span>
-              )}
+              {myCurrent && nextWaiting && <button type="button" className="secondaryButton" onClick={() => { setReturnHome(false); setFeeOpen(true); }}>填写发货邮费</button>}
+              {myCurrent && nextWaiting && <button type="button" className="secondaryButton" disabled={busy} onClick={() => void handoff(false)}>面交给下一棒</button>}
+              {canReturn && <button type="button" className="secondaryButton" onClick={() => { setReturnHome(true); setFeeOpen(true); }}>寄回图主并填写回家邮费</button>}
+              {canReturn && <button type="button" className="secondaryButton" onClick={() => { setReturnHome(true); setRetentionMode("shipped"); }}>上传寄回留存</button>}
+              {canReturn && <button type="button" className="secondaryButton" disabled={busy} onClick={() => void handoff(true)}>面交还给图主</button>}
+              {(canShip || canReturn) && <span className="actionHint">先填写邮费，再上传发货留存。</span>}
             </div>
           </div>
         </div>
 
         {error && <div className="errorBox detailError">{error}</div>}
+
+        {feeOpen && <form className="retentionPanel" onSubmit={submitFee}>
+          <h3>{returnHome ? "回家邮费" : "发货邮费"}</h3>
+          <label><span>金额（元）*</span><input type="number" min="0.01" step="0.01" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} required /></label>
+          <label><span>运单号（选填）</span><input maxLength={120} value={tracking} onChange={(e) => setTracking(e.target.value)} /></label>
+          <label><span>运费截图（选填）</span><input type="file" accept="image/*" onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)} /></label>
+          <div className="modalActions alignLeft"><button type="button" className="secondaryButton" onClick={() => setFeeOpen(false)}>取消</button><button className="primaryButton" disabled={busy}>提交邮费</button></div>
+        </form>}
 
         {retentionMode && (
           <form className="retentionPanel" onSubmit={submitRetention}>
@@ -219,7 +275,7 @@ export function PuzzleDetailModal({
 
             <label>
               <span>照片 *</span>
-              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setRetentionFile(event.target.files?.[0] ?? null)} />
+              <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(event) => setRetentionFiles(Array.from(event.target.files ?? []))} />
             </label>
 
             <label>
@@ -229,7 +285,7 @@ export function PuzzleDetailModal({
 
             <div className="modalActions alignLeft">
               <button type="button" className="secondaryButton" onClick={() => setRetentionMode(null)}>取消</button>
-              <button type="submit" className="primaryButton" disabled={busy || !retentionFile || !retentionDate}>
+              <button type="submit" className="primaryButton" disabled={busy || retentionFiles.length === 0 || !retentionDate}>
                 {busy ? "提交中…" : "确认提交"}
               </button>
             </div>
@@ -249,7 +305,7 @@ export function PuzzleDetailModal({
             {activeJourney.map((row) => (
               <div className={`journeyRow journey-${row.status}`} key={row.id}>
                 <div className="journeyIdentity">
-                  <Avatar name={row.username} size={38} />
+                  <Avatar name={row.username} url={row.avatar_url} size={38} onOpen={() => onOpenUser(row.user_id)} />
                   <div>
                     <strong>{row.username}</strong>
                     <span>{row.is_owner_start ? "图主" : `第 ${row.seq} 棒`}</span>
@@ -263,16 +319,18 @@ export function PuzzleDetailModal({
                 </div>
 
                 <div className="retentionLinks">
-                  {row.received_photo_url && (
-                    <a href={row.received_photo_url} target="_blank" rel="noreferrer">收货留存</a>
-                  )}
-                  {row.shipping_photo_url && (
-                    <a href={row.shipping_photo_url} target="_blank" rel="noreferrer">发货留存</a>
-                  )}
+                  {(history[row.id]?.received_photo_urls ?? []).map((url, i) => <a href={url} target="_blank" rel="noreferrer" key={`r${i}`}>收货图 {i + 1}</a>)}
+                  {history[row.id]?.receiving_note && <span>{history[row.id].receiving_note}</span>}
+                  {(history[row.id]?.shipping_photo_urls ?? []).map((url, i) => <a href={url} target="_blank" rel="noreferrer" key={`s${i}`}>发货图 {i + 1}</a>)}
+                  {history[row.id]?.shipping_note && <span>{history[row.id].shipping_note}</span>}
                 </div>
               </div>
             ))}
           </div>
+          {handoffs.length > 0 && <div className="journeyList"><h4>面交记录</h4>{handoffs.map((handoff) => <p key={handoff.id}>
+            {puzzle.journey.find((row) => row.user_id === handoff.from_user_id)?.username ?? "成员"} → {puzzle.journey.find((row) => row.user_id === handoff.to_user_id)?.username ?? "成员"}
+            {handoff.return_home ? "（交还图主）" : ""} · {new Date(handoff.created_at).toLocaleDateString("zh-CN")}
+          </p>)}</div>}
         </section>
 
         {canManage && (
@@ -299,18 +357,16 @@ export function PuzzleDetailModal({
                   <span>介绍</span>
                   <textarea rows={3} value={description} maxLength={1000} onChange={(event) => setDescription(event.target.value)} />
                 </label>
-                <label>
+                {puzzle.availability !== "retired" && <label>
                   <span>漂流状态</span>
                   <select value={availability} onChange={(event) => setAvailability(event.target.value as Puzzle["availability"])}>
                     <option value="active">开放漂流</option>
                     <option value="paused">暂停漂流</option>
-                    <option value="retired">结束漂流</option>
                   </select>
-                </label>
+                </label>}
                 <div className="modalActions editWide alignLeft">
                   <button type="button" className="secondaryButton" onClick={() => setEditing(false)}>取消</button>
                   <button type="submit" className="primaryButton" disabled={busy}>保存</button>
-                  <button type="button" className="dangerButton" disabled={busy} onClick={deletePuzzle}>删除拼图</button>
                 </div>
               </form>
             )}

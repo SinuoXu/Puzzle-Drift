@@ -28,6 +28,10 @@ function describe(activity: Activity) {
       return `为《${activity.puzzle_name}》上传了发货留存`;
     case "became_holder":
       return `成为《${activity.puzzle_name}》的当前持有人`;
+    case "handoff":
+      return `面交了《${activity.puzzle_name}》`;
+    case "queue_moved":
+      return `调整了《${activity.puzzle_name}》的排队位置`;
     case "availability_changed": {
       const value = String(activity.payload.availability ?? "");
       const label = value === "active" ? "开放漂流" : value === "paused" ? "暂停漂流" : "结束漂流";
@@ -38,7 +42,7 @@ function describe(activity: Activity) {
   }
 }
 
-export function ActivityFeed({ activities, onOpenPuzzle }: { activities: Activity[]; onOpenPuzzle: (id: string) => void }) {
+export function ActivityFeed({ activities, onOpenPuzzle, onOpenUser }: { activities: Activity[]; onOpenPuzzle: (id: string) => void; onOpenUser: (id: string) => void }) {
   if (activities.length === 0) {
     return <div className="emptyPanel">暂时还没有动态。发布第一张拼图后，这里会自动出现消息。</div>;
   }
@@ -52,7 +56,7 @@ export function ActivityFeed({ activities, onOpenPuzzle }: { activities: Activit
           key={activity.id}
           onClick={() => onOpenPuzzle(activity.puzzle_id)}
         >
-          <Avatar name={activity.actor_name} size={38} />
+          <Avatar name={activity.actor_name} url={activity.actor_avatar_url} size={38} onOpen={activity.actor_id ? () => onOpenUser(activity.actor_id as string) : undefined} />
           <div className="activityCopy">
             <div>
               <strong>{activity.actor_name}</strong> {describe(activity)}

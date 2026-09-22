@@ -7,8 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MAX_BYTES = 6 * 1024 * 1024;
-const ALLOWED_KINDS = new Set(["cover", "received", "shipped"]);
+const MAX_BYTES = 1_000_000;
+const ALLOWED_KINDS = new Set(["cover", "received", "shipped", "avatar", "payment_qr", "receipt"]);
 
 function extensionForMime(type: string): string {
   if (type === "image/png") return "png";
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "只支持 JPG、PNG、WebP。" }, { status: 400 });
     }
 
-    if (file.size <= 0 || file.size > MAX_BYTES) {
-      return NextResponse.json({ error: "图片必须小于 6 MB。" }, { status: 400 });
+    if (file.size <= 0 || file.size >= MAX_BYTES) {
+      return NextResponse.json({ error: "图片必须小于 1 MB。" }, { status: 400 });
     }
 
     const ext = extensionForMime(file.type);

@@ -24,7 +24,7 @@ export async function POST(_request: NextRequest, context: { params: Promise<{ i
     if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
 
     const db = getSupabaseAdmin();
-    const { data, error } = await db.rpc("join_puzzle_queue", {
+    const { data, error } = await db.rpc("v03_join_queue", {
       p_puzzle_id: id,
       p_user_id: user.id,
     });
@@ -46,7 +46,7 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
     if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
 
     const db = getSupabaseAdmin();
-    const { data, error } = await db.rpc("cancel_puzzle_queue", {
+    const { data, error } = await db.rpc("v03_cancel_queue", {
       p_puzzle_id: id,
       p_user_id: user.id,
     });
@@ -59,4 +59,18 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
     console.error("DELETE queue failed", error);
     return NextResponse.json({ error: "退出排队失败。" }, { status: 500 });
   }
+}
+
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
+  const { id } = await context.params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "无效的拼图 ID。" }, { status: 400 });
+  const input = await request.json().catch(() => null);
+  if (input?.direction !== -1 && input?.direction !== 1) return NextResponse.json({ error: "方向不正确。" }, { status: 400 });
+  const { data, error } = await getSupabaseAdmin().rpc("v03_move_queue", {
+    p_puzzle_id: id, p_user_id: user.id, p_direction: input.direction,
+  });
+  if (error) return NextResponse.json({ error: "当前排队位置不能调整，可能已经安排邮寄。" }, { status: 400 });
+  return NextResponse.json({ moved: data });
 }
