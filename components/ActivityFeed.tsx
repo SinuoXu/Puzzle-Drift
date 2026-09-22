@@ -1,0 +1,66 @@
+"use client";
+
+import type { Activity } from "@/lib/types";
+import { Avatar } from "@/components/Avatar";
+
+function formatTime(value: string) {
+  try {
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return "";
+  }
+}
+
+function describe(activity: Activity) {
+  switch (activity.type) {
+    case "puzzle_created":
+      return `发布了新拼图《${activity.puzzle_name}》`;
+    case "queue_joined":
+      return `排队了《${activity.puzzle_name}》`;
+    case "received":
+      return `为《${activity.puzzle_name}》上传了收货留存`;
+    case "shipped":
+      return `为《${activity.puzzle_name}》上传了发货留存`;
+    case "became_holder":
+      return `成为《${activity.puzzle_name}》的当前持有人`;
+    case "availability_changed": {
+      const value = String(activity.payload.availability ?? "");
+      const label = value === "active" ? "开放漂流" : value === "paused" ? "暂停漂流" : "结束漂流";
+      return `将《${activity.puzzle_name}》设为“${label}”`;
+    }
+    default:
+      return `更新了《${activity.puzzle_name}》`;
+  }
+}
+
+export function ActivityFeed({ activities, onOpenPuzzle }: { activities: Activity[]; onOpenPuzzle: (id: string) => void }) {
+  if (activities.length === 0) {
+    return <div className="emptyPanel">暂时还没有动态。发布第一张拼图后，这里会自动出现消息。</div>;
+  }
+
+  return (
+    <div className="activityList">
+      {activities.map((activity) => (
+        <button
+          type="button"
+          className="activityItem"
+          key={activity.id}
+          onClick={() => onOpenPuzzle(activity.puzzle_id)}
+        >
+          <Avatar name={activity.actor_name} size={38} />
+          <div className="activityCopy">
+            <div>
+              <strong>{activity.actor_name}</strong> {describe(activity)}
+            </div>
+            <span>{formatTime(activity.created_at)}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}

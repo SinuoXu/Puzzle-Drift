@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Puzzle Drift",
-  description: "拼图漂流共享空间",
+  description: "拼图漂流库",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

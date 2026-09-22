@@ -8,13 +8,18 @@ const SESSION_DURATION_MS = 365 * 24 * 60 * 60 * 1000;
 export type AppUser = {
   id: string;
   username: string;
+  avatar_url: string | null;
+  is_admin: boolean;
 };
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function createSession(userId: string): Promise<{ token: string; expiresAt: Date }> {
+export async function createSession(userId: string): Promise<{
+  token: string;
+  expiresAt: Date;
+}> {
   const db = getSupabaseAdmin();
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
@@ -27,7 +32,6 @@ export async function createSession(userId: string): Promise<{ token: string; ex
   });
 
   if (error) throw new Error(`Failed to create session: ${error.message}`);
-
   return { token, expiresAt };
 }
 
@@ -59,22 +63,26 @@ export async function getCurrentUser(): Promise<AppUser | null> {
   if (sessionError) throw new Error(`Failed to read session: ${sessionError.message}`);
   if (!session) return null;
 
-  const expiresAt = new Date(session.expires_at);
-  if (expiresAt.getTime() <= Date.now()) {
+  if (new Date(session.expires_at).getTime() <= Date.now()) {
     await db.from("app_sessions").delete().eq("token_hash", tokenHash);
     return null;
   }
 
   const { data: user, error: userError } = await db
     .from("app_users")
-    .select("id, username")
+    .select("id, username, avatar_url, is_admin")
     .eq("id", session.user_id)
     .maybeSingle();
 
   if (userError) throw new Error(`Failed to read user: ${userError.message}`);
   if (!user) return null;
 
-  return { id: user.id, username: user.username };
+  return {
+    id: user.id,
+    username: user.username,
+    avatar_url: user.avatar_url ?? null,
+    is_admin: Boolean(user.is_admin),
+  };
 }
 
 export async function destroyCurrentSession(): Promise<void> {

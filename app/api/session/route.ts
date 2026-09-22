@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { createSession, destroyCurrentSession, getCurrentUser, setSessionCookie } from "@/lib/session";
+import {
+  createSession,
+  destroyCurrentSession,
+  getCurrentUser,
+  setSessionCookie,
+} from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,25 +21,17 @@ function normalizeUsername(input: unknown): { username: string; normalized: stri
 
   return {
     username,
-    normalized: username.toLocaleLowerCase("zh-CN"),
+    normalized: username.toLowerCase(),
   };
 }
 
 export async function GET() {
   try {
     const user = await getCurrentUser();
-
     if (!user) {
-      return NextResponse.json(
-        { user: null },
-        { status: 401, headers: { "Cache-Control": "no-store" } },
-      );
+      return NextResponse.json({ user: null }, { status: 401, headers: { "Cache-Control": "no-store" } });
     }
-
-    return NextResponse.json(
-      { user },
-      { headers: { "Cache-Control": "no-store" } },
-    );
+    return NextResponse.json({ user }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("GET /api/session failed", error);
     return NextResponse.json({ error: "读取登录状态失败。" }, { status: 500 });
@@ -56,9 +53,10 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getSupabaseAdmin();
+
     let { data: user, error: findError } = await db
       .from("app_users")
-      .select("id, username")
+      .select("id, username, avatar_url, is_admin")
       .eq("username_normalized", parsed.normalized)
       .maybeSingle();
 
@@ -70,14 +68,15 @@ export async function POST(request: NextRequest) {
         .insert({
           username: parsed.username,
           username_normalized: parsed.normalized,
+          is_admin: parsed.normalized === "nono",
         })
-        .select("id, username")
+        .select("id, username, avatar_url, is_admin")
         .single();
 
       if (createError && createError.code === "23505") {
         const { data: existingUser, error: retryError } = await db
           .from("app_users")
-          .select("id, username")
+          .select("id, username, avatar_url, is_admin")
           .eq("username_normalized", parsed.normalized)
           .single();
 
@@ -92,15 +91,33 @@ export async function POST(request: NextRequest) {
 
     if (!user) throw new Error("User could not be created.");
 
+    // Ensure the reserved username "nono" is always marked as admin.
+    if (parsed.normalized === "nono" && !user.is_admin) {
+      const { data: promoted, error: promoteError } = await db
+        .from("app_users")
+        .update({ is_admin: true })
+        .eq("id", user.id)
+        .select("id, username, avatar_url, is_admin")
+        .single();
+
+      if (promoteError) throw new Error(promoteError.message);
+      user = promoted;
+    }
+
     const { token, expiresAt } = await createSession(user.id);
     await setSessionCookie(token, expiresAt);
 
     return NextResponse.json({
-      user: { id: user.id, username: user.username },
+      user: {
+        id: user.id,
+        username: user.username,
+        avatar_url: user.avatar_url ?? null,
+        is_admin: Boolean(user.is_admin),
+      },
     });
   } catch (error) {
     console.error("POST /api/session failed", error);
-    return NextResponse.json({ error: "登录失败，请稍后重试。" }, { status: 500 });
+    return NextResponse.json({ error: "进入失败，请稍后重试。" }, { status: 500 });
   }
 }
 

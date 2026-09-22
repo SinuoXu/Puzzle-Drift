@@ -1,296 +1,357 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { ActivityFeed } from "@/components/ActivityFeed";
+import { Avatar } from "@/components/Avatar";
+import { NewPuzzleModal } from "@/components/NewPuzzleModal";
+import { PuzzleCard } from "@/components/PuzzleCard";
+import { PuzzleDetailModal } from "@/components/PuzzleDetailModal";
+import { getRealtimeClient } from "@/lib/realtime-client";
+import type { Puzzle, Snapshot, User } from "@/lib/types";
 
-type User = { id: string; username: string };
-type ListItem = {
-  id: string;
-  content: string;
-  created_by: string;
-  created_at: string;
-  creator_username: string;
-};
+type Tab = "feed" | "library" | "mine";
+type LibraryFilter = "all" | "drifting" | "idle" | "open";
 
-function formatTime(value: string): string {
-  try {
-    return new Intl.DateTimeFormat("zh-CN", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return "";
-  }
-}
-
-export default function Home() {
-  const [booting, setBooting] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
+function LoginScreen({ onLogin }: { onLogin: (user: User) => Promise<void> }) {
   const [username, setUsername] = useState("");
-  const [items, setItems] = useState<ListItem[]>([]);
-  const [newItem, setNewItem] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [loggingIn, setLoggingIn] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function bootstrap() {
-      try {
-        const response = await fetch("/api/session", { cache: "no-store" });
-        if (!cancelled && response.ok) {
-          const data = await response.json();
-          setUser(data.user);
-        }
-      } catch {
-        // Keep the login screen available if bootstrap fails.
-      } finally {
-        if (!cancelled) setBooting(false);
-      }
-    }
-
-    void bootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const loadItems = useCallback(async () => {
-    try {
-      const response = await fetch("/api/items", { cache: "no-store" });
-
-      if (response.status === 401) {
-        setUser(null);
-        setItems([]);
-        return;
-      }
-
-      if (!response.ok) return;
-
-      const data = await response.json();
-      setItems(data.items ?? []);
-    } catch {
-      // A transient polling failure should not clear the current page.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-
-    void loadItems();
-    const timer = window.setInterval(() => void loadItems(), 4000);
-    return () => window.clearInterval(timer);
-  }, [user, loadItems]);
-
-  async function handleLogin(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     if (!username.trim()) return;
 
-    setLoggingIn(true);
+    setBusy(true);
     setError("");
-
     try {
       const response = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),
       });
-
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? "进入失败。");
-
-      setUser(data.user);
-      setUsername("");
+      await onLogin(data.user as User);
     } catch (err) {
       setError(err instanceof Error ? err.message : "进入失败。");
     } finally {
-      setLoggingIn(false);
+      setBusy(false);
     }
-  }
-
-  async function handleLogout() {
-    setError("");
-    try {
-      await fetch("/api/session", { method: "DELETE" });
-    } finally {
-      setUser(null);
-      setItems([]);
-      setNewItem("");
-    }
-  }
-
-  async function handleAdd(event: FormEvent) {
-    event.preventDefault();
-    const value = newItem.trim();
-    if (!value) return;
-
-    setAdding(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: value }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "添加失败。");
-
-      setNewItem("");
-      await loadItems();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "添加失败。");
-    } finally {
-      setAdding(false);
-    }
-  }
-
-  async function handleDelete(item: ListItem) {
-    const confirmed = window.confirm(`确定删除“${item.content}”吗？`);
-    if (!confirmed) return;
-
-    setDeletingId(item.id);
-    setError("");
-
-    try {
-      const response = await fetch("/api/items", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id }),
-      });
-
-      if (response.status !== 204) {
-        let message = "删除失败。";
-        try {
-          const data = await response.json();
-          message = data.error ?? message;
-        } catch {
-          // Ignore malformed error bodies.
-        }
-        throw new Error(message);
-      }
-
-      setItems((current) => current.filter((currentItem) => currentItem.id !== item.id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "删除失败。");
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  if (booting) {
-    return (
-      <main className="centerPage">
-        <div className="brandMark">🧩</div>
-        <p className="muted">Puzzle Drift</p>
-      </main>
-    );
-  }
-
-  if (!user) {
-    return (
-      <main className="centerPage">
-        <section className="loginCard">
-          <div className="brandMark">🧩</div>
-          <h1>Puzzle Drift</h1>
-          <p className="subtitle">拼图漂流</p>
-
-          <form onSubmit={handleLogin} className="loginForm">
-            <label htmlFor="username">你的名字</label>
-            <input
-              id="username"
-              type="text"
-              autoComplete="nickname"
-              maxLength={24}
-              placeholder="例如：徐思诺"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoFocus
-            />
-            <button type="submit" disabled={loggingIn || !username.trim()}>
-              {loggingIn ? "进入中…" : "进入 Puzzle Drift"}
-            </button>
-          </form>
-
-          <p className="loginHint">
-            第一次使用这个名字会自动创建用户。以后在这台设备打开网站会自动进入。
-          </p>
-
-          {error && <div className="errorBox">{error}</div>}
-        </section>
-      </main>
-    );
   }
 
   return (
-    <main className="page">
-      <header className="topbar">
-        <div className="smallBrand">🧩 Puzzle Drift</div>
-        <div className="userArea">
-          <span>{user.username}</span>
-          <button type="button" className="textButton" onClick={handleLogout}>
-            退出
-          </button>
-        </div>
-      </header>
+    <main className="loginPage">
+      <section className="loginCard">
+        <div className="brandIcon">🧩</div>
+        <p className="eyebrow">PUZZLE LIBRARY · DRIFT TOGETHER</p>
+        <h1>Puzzle Drift</h1>
+        <p className="loginSubtitle">拼图漂流库</p>
 
-      <section className="content">
-        <div className="titleRow">
-          <div>
-            <h1>我们的 List</h1>
-            <p>共 {items.length} 项 · 自动同步</p>
-          </div>
-        </div>
-
-        <form className="addForm" onSubmit={handleAdd}>
-          <input
-            type="text"
-            maxLength={200}
-            value={newItem}
-            placeholder="添加一项……"
-            onChange={(event) => setNewItem(event.target.value)}
-          />
-          <button type="submit" disabled={adding || !newItem.trim()}>
-            {adding ? "添加中…" : "＋ 添加"}
+        <form onSubmit={submit} className="loginForm">
+          <label>
+            <span>你的用户名</span>
+            <input
+              value={username}
+              maxLength={24}
+              autoFocus
+              autoComplete="nickname"
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="例如：nono"
+            />
+          </label>
+          <button className="primaryButton largeButton" type="submit" disabled={busy || !username.trim()}>
+            {busy ? "进入中…" : "进入 Puzzle Drift"}
           </button>
         </form>
 
+        <p className="loginHint">同一浏览器会记住你一年。这个版本没有密码，因此用户名只适合熟人内部使用。</p>
         {error && <div className="errorBox">{error}</div>}
-
-        <div className="list">
-          {items.length === 0 && (
-            <div className="emptyState">
-              <div>🧩</div>
-              <p>这里还没有东西。</p>
-              <span>添加第一项吧。</span>
-            </div>
-          )}
-
-          {items.map((item) => (
-            <article key={item.id} className="listItem">
-              <div className="itemMain">
-                <div className="itemContent">{item.content}</div>
-                <div className="itemMeta">
-                  {item.creator_username} · {formatTime(item.created_at)}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className="deleteButton"
-                disabled={deletingId === item.id}
-                onClick={() => void handleDelete(item)}
-              >
-                {deletingId === item.id ? "删除中…" : "删除"}
-              </button>
-            </article>
-          ))}
-        </div>
       </section>
+    </main>
+  );
+}
+
+function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+  return (
+    <div className="pageHeading">
+      <div>
+        <h2>{title}</h2>
+        {subtitle && <p>{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+export default function Home() {
+  const [booting, setBooting] = useState(true);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [tab, setTab] = useState<Tab>("feed");
+  const [selectedPuzzleId, setSelectedPuzzleId] = useState<string | null>(null);
+  const [showNewPuzzle, setShowNewPuzzle] = useState(false);
+  const [search, setSearch] = useState("");
+  const [brand, setBrand] = useState("all");
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
+  const [globalError, setGlobalError] = useState("");
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  const loadSnapshot = useCallback(async (silent = false) => {
+    try {
+      const response = await fetch("/api/snapshot", { cache: "no-store" });
+      if (response.status === 401) {
+        setSnapshot(null);
+        return;
+      }
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "读取数据失败。");
+      setSnapshot(data as Snapshot);
+      if (!silent) setGlobalError("");
+    } catch (err) {
+      if (!silent) setGlobalError(err instanceof Error ? err.message : "读取数据失败。");
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await loadSnapshot(true);
+      if (!cancelled) setBooting(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSnapshot]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+
+    const realtime = getRealtimeClient();
+    if (realtime) {
+      const channel = realtime
+        .channel("puzzle-drift-sync")
+        .on("broadcast", { event: "invalidate" }, () => {
+          void loadSnapshot(true);
+        })
+        .subscribe();
+      channelRef.current = channel;
+
+      return () => {
+        channelRef.current = null;
+        void realtime.removeChannel(channel);
+      };
+    }
+
+    return;
+  }, [Boolean(snapshot), loadSnapshot]);
+
+  // Fallback consistency check. Realtime normally updates immediately; polling catches missed events.
+  useEffect(() => {
+    if (!snapshot) return;
+    const timer = window.setInterval(() => void loadSnapshot(true), 10_000);
+    return () => window.clearInterval(timer);
+  }, [Boolean(snapshot), loadSnapshot]);
+
+  const broadcastInvalidate = useCallback(async () => {
+    try {
+      await channelRef.current?.send({
+        type: "broadcast",
+        event: "invalidate",
+        payload: { at: Date.now() },
+      });
+    } catch {
+      // Polling remains as a fallback if realtime is unavailable.
+    }
+  }, []);
+
+  const mutationCompleted = useCallback(async () => {
+    await loadSnapshot();
+    await broadcastInvalidate();
+  }, [loadSnapshot, broadcastInvalidate]);
+
+  const selectedPuzzle = useMemo(
+    () => snapshot?.puzzles.find((puzzle) => puzzle.id === selectedPuzzleId) ?? null,
+    [snapshot, selectedPuzzleId]
+  );
+
+  const brands = useMemo(() => {
+    if (!snapshot) return [];
+    return Array.from(new Set(snapshot.puzzles.map((p) => p.brand).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  }, [snapshot]);
+
+  const filteredPuzzles = useMemo(() => {
+    if (!snapshot) return [];
+    const keyword = search.trim().toLowerCase();
+
+    return snapshot.puzzles.filter((puzzle) => {
+      if (brand !== "all" && puzzle.brand !== brand) return false;
+      if (libraryFilter === "drifting" && puzzle.drift_state !== "drifting") return false;
+      if (libraryFilter === "idle" && puzzle.drift_state === "drifting") return false;
+      if (libraryFilter === "open" && puzzle.availability !== "active") return false;
+      if (keyword && !`${puzzle.name} ${puzzle.brand}`.toLowerCase().includes(keyword)) return false;
+      return true;
+    });
+  }, [snapshot, search, brand, libraryFilter]);
+
+  if (booting) {
+    return (
+      <main className="loadingPage">
+        <div className="brandIcon">🧩</div>
+        <span>Puzzle Drift</span>
+      </main>
+    );
+  }
+
+  if (!snapshot) {
+    return <LoginScreen onLogin={async () => loadSnapshot()} />;
+  }
+
+  const { user, puzzles, activities } = snapshot;
+  const myOwned = puzzles.filter((puzzle) => puzzle.owner_id === user.id);
+  const myHolding = puzzles.filter((puzzle) => puzzle.current_holder_id === user.id && puzzle.owner_id !== user.id);
+  const myQueued = puzzles.filter((puzzle) => puzzle.journey.some((row) => row.user_id === user.id && row.status === "waiting"));
+
+  async function logout() {
+    await fetch("/api/session", { method: "DELETE" });
+    setSnapshot(null);
+    setSelectedPuzzleId(null);
+  }
+
+  return (
+    <main className="appShell">
+      <header className="topNav">
+        <button className="brandButton" type="button" onClick={() => setTab("feed")}>
+          <span>🧩</span>
+          <div>
+            <strong>Puzzle Drift</strong>
+            <small>拼图漂流库</small>
+          </div>
+        </button>
+
+        <nav className="desktopTabs" aria-label="主导航">
+          <button className={tab === "feed" ? "active" : ""} onClick={() => setTab("feed")}>消息中心</button>
+          <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>漂流中心</button>
+          <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>个人中心</button>
+        </nav>
+
+        <div className="userChip">
+          <Avatar name={user.username} size={32} />
+          <div>
+            <strong>{user.username}</strong>
+            <small>{user.is_admin ? "管理员" : "成员"}</small>
+          </div>
+          <button type="button" onClick={logout}>退出</button>
+        </div>
+      </header>
+
+      <nav className="mobileTabs" aria-label="移动端导航">
+        <button className={tab === "feed" ? "active" : ""} onClick={() => setTab("feed")}>消息</button>
+        <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>图库</button>
+        <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>我的</button>
+      </nav>
+
+      <div className="appContent">
+        {globalError && <div className="errorBox globalError">{globalError}</div>}
+
+        {tab === "feed" && (
+          <section>
+            <SectionTitle
+              title="消息中心"
+              subtitle="新图、排队、收货和发货都会自动同步到这里。"
+              action={<button className="primaryButton" type="button" onClick={() => setShowNewPuzzle(true)}>＋ 发布拼图</button>}
+            />
+
+            <div className="feedLayout">
+              <div>
+                <ActivityFeed activities={activities} onOpenPuzzle={setSelectedPuzzleId} />
+              </div>
+              <aside className="sidebarCard">
+                <p className="eyebrow">实时状态</p>
+                <h3>{puzzles.length} 张拼图</h3>
+                <div className="statsGrid">
+                  <div><strong>{puzzles.filter((p) => p.drift_state === "drifting").length}</strong><span>正在漂</span></div>
+                  <div><strong>{puzzles.reduce((sum, p) => sum + p.waiting_count, 0)}</strong><span>排队中</span></div>
+                </div>
+                <p className="sidebarNote">页面变更会通过实时消息通知其他在线设备；即使实时连接中断，也会每 10 秒自动校准一次。</p>
+              </aside>
+            </div>
+          </section>
+        )}
+
+        {tab === "library" && (
+          <section>
+            <SectionTitle
+              title="漂流中心"
+              subtitle="所有人的拼图都在同一个图库里。"
+              action={<button className="primaryButton" type="button" onClick={() => setShowNewPuzzle(true)}>＋ 发布拼图</button>}
+            />
+
+            <div className="filterBar">
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索图名或品牌…" />
+              <select value={libraryFilter} onChange={(event) => setLibraryFilter(event.target.value as LibraryFilter)}>
+                <option value="all">全部状态</option>
+                <option value="drifting">正在漂</option>
+                <option value="idle">目前没在漂</option>
+                <option value="open">开放排队</option>
+              </select>
+              <select value={brand} onChange={(event) => setBrand(event.target.value)}>
+                <option value="all">全部品牌</option>
+                {brands.map((item) => <option value={item} key={item}>{item}</option>)}
+              </select>
+            </div>
+
+            {filteredPuzzles.length > 0 ? (
+              <div className="puzzleGrid">
+                {filteredPuzzles.map((puzzle) => <PuzzleCard key={puzzle.id} puzzle={puzzle} onOpen={setSelectedPuzzleId} />)}
+              </div>
+            ) : (
+              <div className="emptyPanel">没有找到符合条件的拼图。</div>
+            )}
+          </section>
+        )}
+
+        {tab === "mine" && (
+          <section>
+            <SectionTitle
+              title="个人中心"
+              subtitle={`${user.username} 的拼图、持有和排队。`}
+              action={<button className="primaryButton" type="button" onClick={() => setShowNewPuzzle(true)}>＋ 上传我的拼图</button>}
+            />
+
+            <div className="mySection">
+              <div className="subHeading"><h3>我的拼图</h3><span>{myOwned.length}</span></div>
+              {myOwned.length > 0 ? <div className="puzzleGrid compactGrid">{myOwned.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} />)}</div> : <div className="emptyPanel smallEmpty">你还没有发布拼图。</div>}
+            </div>
+
+            <div className="mySection">
+              <div className="subHeading"><h3>我正在持有</h3><span>{myHolding.length}</span></div>
+              {myHolding.length > 0 ? <div className="puzzleGrid compactGrid">{myHolding.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} />)}</div> : <div className="emptyPanel smallEmpty">目前没有别人的拼图在你手里。</div>}
+            </div>
+
+            <div className="mySection">
+              <div className="subHeading"><h3>我的排队</h3><span>{myQueued.length}</span></div>
+              {myQueued.length > 0 ? <div className="puzzleGrid compactGrid">{myQueued.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} />)}</div> : <div className="emptyPanel smallEmpty">你还没有排队。</div>}
+            </div>
+          </section>
+        )}
+      </div>
+
+      {showNewPuzzle && (
+        <NewPuzzleModal
+          onClose={() => setShowNewPuzzle(false)}
+          onCreated={mutationCompleted}
+        />
+      )}
+
+      {selectedPuzzle && (
+        <PuzzleDetailModal
+          puzzle={selectedPuzzle}
+          currentUser={user}
+          onClose={() => setSelectedPuzzleId(null)}
+          onChanged={mutationCompleted}
+        />
+      )}
     </main>
   );
 }
