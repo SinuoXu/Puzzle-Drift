@@ -28,6 +28,12 @@ export function PuzzleCard({ puzzle, onOpen, onOpenUser }: { puzzle: Puzzle; onO
           <span className="queueCount">{puzzle.waiting_count > 0 ? `排队 ${puzzle.waiting_count}` : "暂无排队"}</span>
         </div>
 
+        <div className="puzzleMeta">
+          <span>{puzzle.piece_count ? `${puzzle.piece_count} 片` : "片数未填"}</span>
+          <span>{puzzle.has_box ? "有盒" : "无盒"}</span>
+          <span>{puzzle.has_sheet ? "有图纸" : "无图纸"}</span>
+        </div>
+
         <div className="ownerLine">
           <Avatar name={puzzle.owner_name} url={puzzle.owner_avatar_url} size={28} onOpen={() => onOpenUser(puzzle.owner_id)} />
           <span>图主 {puzzle.owner_name}</span>

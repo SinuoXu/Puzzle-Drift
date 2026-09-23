@@ -25,6 +25,9 @@ export type Puzzle = {
   brand: string;
   description: string;
   cover_url: string;
+  piece_count: number | null;
+  has_box: boolean;
+  has_sheet: boolean;
   owner_id: string;
   owner_name: string;
   owner_avatar_url: string | null;

@@ -288,3 +288,65 @@ textarea { resize: vertical; }
 .profileModal { width: min(100%, 590px); padding: 18px; }
 .profileModal > .iconButton { float: right; }
 .destinationBox { padding: 12px; background: var(--surface-alt, #f7f4ec); border-radius: 12px; }
+
+
+/* Puzzle metadata / admin controls */
+.featureChecks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 4px 0;
+}
+
+.checkboxRow {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  cursor: pointer;
+}
+
+.checkboxRow input {
+  width: auto;
+  margin: 0;
+}
+
+.puzzleMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.puzzleMeta span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.puzzleMetaDetail {
+  margin-top: 14px;
+}
+
+.adminBlock {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.adminBlock h4 {
+  margin: 10px 0 0;
+}
+
+.adminBlock p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}

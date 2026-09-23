@@ -32,8 +32,14 @@ export async function POST(request: NextRequest) {
     const brandInput = cleanText(input.brand, 80);
     const descriptionInput = cleanText(input.description, 1000);
     const coverUrl = cleanText(input.cover_url, 2000, true);
+    const pieceCount = Number(input.piece_count);
+    const hasBox = input.has_box === true;
+    const hasSheet = input.has_sheet === true;
 
     if (!name) return NextResponse.json({ error: "请填写 1–80 字的拼图名称。" }, { status: 400 });
+    if (!Number.isSafeInteger(pieceCount) || pieceCount <= 0 || pieceCount > 100000) {
+      return NextResponse.json({ error: "请填写正确的拼图片数。" }, { status: 400 });
+    }
     if (brandInput === null) return NextResponse.json({ error: "品牌最多 80 字。" }, { status: 400 });
     if (descriptionInput === null) return NextResponse.json({ error: "介绍最多 1000 字。" }, { status: 400 });
     const brand = brandInput ?? "";
@@ -48,6 +54,9 @@ export async function POST(request: NextRequest) {
       p_brand: brand,
       p_cover_url: coverUrl,
       p_description: description,
+      p_piece_count: pieceCount,
+      p_has_box: hasBox,
+      p_has_sheet: hasSheet,
       p_owner_id: user.id,
     });
 

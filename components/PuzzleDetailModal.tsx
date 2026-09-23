@@ -266,6 +266,12 @@ export function PuzzleDetailModal({
               {summary}
             </div>
 
+            <div className="puzzleMeta puzzleMetaDetail">
+              <span>{puzzle.piece_count ? `${puzzle.piece_count} 片` : "片数未填"}</span>
+              <span>{puzzle.has_box ? "有盒" : "无盒"}</span>
+              <span>{puzzle.has_sheet ? "有图纸" : "无图纸"}</span>
+            </div>
+
             {puzzle.description && <p className="detailDescription">{puzzle.description}</p>}
 
             <div className="detailActions">

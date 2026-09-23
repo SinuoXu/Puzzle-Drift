@@ -13,13 +13,22 @@ export function NewPuzzleModal({
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [description, setDescription] = useState("");
+  const [pieceCount, setPieceCount] = useState("");
+  const [hasBox, setHasBox] = useState(false);
+  const [hasSheet, setHasSheet] = useState(false);
   const [cover, setCover] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const pieces = Number(pieceCount);
+  const piecesValid =
+    Number.isSafeInteger(pieces) &&
+    pieces > 0 &&
+    pieces <= 100_000;
+
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!name.trim() || !cover) return;
+    if (!name.trim() || !cover || !piecesValid) return;
 
     setBusy(true);
     setError("");
@@ -34,6 +43,9 @@ export function NewPuzzleModal({
           brand,
           description,
           cover_url: coverUrl,
+          piece_count: pieces,
+          has_box: hasBox,
+          has_sheet: hasSheet,
         }),
       });
 
@@ -72,6 +84,40 @@ export function NewPuzzleModal({
           </label>
 
           <label>
+            <span>片数 *</span>
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              step={1}
+              inputMode="numeric"
+              value={pieceCount}
+              onChange={(event) => setPieceCount(event.target.value)}
+              placeholder="例如：1000"
+            />
+          </label>
+
+          <div className="featureChecks">
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={hasBox}
+                onChange={(event) => setHasBox(event.target.checked)}
+              />
+              <span>有盒</span>
+            </label>
+
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={hasSheet}
+                onChange={(event) => setHasSheet(event.target.checked)}
+              />
+              <span>有图纸</span>
+            </label>
+          </div>
+
+          <label>
             <span>封面图 *</span>
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setCover(event.target.files?.[0] ?? null)} />
           </label>
@@ -85,7 +131,7 @@ export function NewPuzzleModal({
 
           <div className="modalActions">
             <button type="button" className="secondaryButton" onClick={onClose}>取消</button>
-            <button type="submit" className="primaryButton" disabled={busy || !name.trim() || !cover}>
+            <button type="submit" className="primaryButton" disabled={busy || !name.trim() || !cover || !piecesValid}>
               {busy ? "发布中…" : "发布拼图"}
             </button>
           </div>

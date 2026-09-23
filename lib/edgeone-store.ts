@@ -40,7 +40,7 @@ function emptyState(): EdgeState {
     puzzle_tasks: [],
     puzzle_handoffs: [],
     counters: { puzzle_activity: 1 },
-    metadata: {},
+    metadata: { registration_open: true },
   };
 }
 
@@ -58,6 +58,13 @@ function normalizeState(input: any): EdgeState {
   ] as const) {
     if (!Array.isArray(state[key])) state[key] = [] as never;
   }
+  if (!state.metadata || typeof state.metadata !== "object") {
+    state.metadata = {};
+  }
+  if (typeof state.metadata.registration_open !== "boolean") {
+    state.metadata.registration_open = true;
+  }
+
   const maxActivity = state.puzzle_activity.reduce((max, row) => {
     const value = Number(row.id);
     return Number.isFinite(value) ? Math.max(max, value) : max;
@@ -132,6 +139,20 @@ export async function mutateState<T>(fn: (state: EdgeState) => T | Promise<T>): 
   } finally {
     await openDataStore().delete(lockKey).catch(() => undefined);
   }
+}
+
+export async function isRegistrationOpen(): Promise<boolean> {
+  const state = await readState();
+  return state.metadata?.registration_open !== false;
+}
+
+export async function setRegistrationOpen(open: boolean): Promise<void> {
+  await mutateState((state) => {
+    state.metadata = {
+      ...(state.metadata ?? {}),
+      registration_open: open,
+    };
+  });
 }
 
 export async function replaceState(next: EdgeState): Promise<void> {

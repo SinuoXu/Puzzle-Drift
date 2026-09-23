@@ -42,8 +42,14 @@ export async function POST(request: NextRequest) {
     }
 
     const ext = extensionForMime(file.type);
-    const day = new Date().toISOString().slice(0, 10);
-    const path = `${kind}/${user.id}/${day}/${randomUUID()}.${ext}`;
+
+    const requestedUploadId = request.headers.get("x-pd-upload-id");
+    const safeUploadId =
+      requestedUploadId && /^[A-Za-z0-9_-]{12,100}$/.test(requestedUploadId)
+        ? requestedUploadId
+        : randomUUID();
+
+    const path = `${kind}/${user.id}/${safeUploadId}.${ext}`;
     const db = getSupabaseAdmin();
     const buffer = Buffer.from(await file.arrayBuffer());
 

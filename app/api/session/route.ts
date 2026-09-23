@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash, compare } from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { isRegistrationOpen } from "@/lib/edgeone-store";
 import {
   createSession,
   destroyCurrentSession,
@@ -68,6 +69,8 @@ export async function POST(request: NextRequest) {
     if (findError) throw new Error(findError.message);
 
     if (!user) {
+      let adminBootstrap = false;
+
       if (parsed.normalized === "nono") {
         const { data: existingAdmins, error: adminError } = await db
           .from("app_users")
@@ -83,6 +86,15 @@ export async function POST(request: NextRequest) {
             { status: 403 }
           );
         }
+
+        adminBootstrap = true;
+      }
+
+      if (!adminBootstrap && !(await isRegistrationOpen())) {
+        return NextResponse.json(
+          { error: "当前已关闭新成员注册，请联系管理员。" },
+          { status: 403 }
+        );
       }
 
       const { data: newUser, error: createError } = await db

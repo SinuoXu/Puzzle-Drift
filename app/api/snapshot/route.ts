@@ -20,7 +20,7 @@ export async function GET() {
       db.from("app_users").select("id, username, avatar_url, is_admin"),
       db
         .from("puzzles")
-        .select("id, name, brand, description, cover_url, owner_id, current_holder_id, availability, in_transit, created_at, updated_at")
+        .select("id, name, brand, description, cover_url, piece_count, has_box, has_sheet, owner_id, current_holder_id, availability, in_transit, created_at, updated_at")
         .order("created_at", { ascending: false }),
       db
         .from("puzzle_journey")
