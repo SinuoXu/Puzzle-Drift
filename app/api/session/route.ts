@@ -69,8 +69,21 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       if (parsed.normalized === "nono") {
-        return NextResponse.json({ error: "管理员账号需由已有管理员恢复。" }, { status: 403 });
+        const { data: existingUsers, error: usersError } = await db
+          .from("app_users")
+          .select("id")
+          .limit(1);
+
+        if (usersError) throw new Error(usersError.message);
+
+        if ((existingUsers ?? []).length > 0) {
+          return NextResponse.json(
+            { error: "管理员账号需由已有管理员恢复。" },
+            { status: 403 }
+          );
+        }
       }
+
       const { data: newUser, error: createError } = await db
         .from("app_users")
         .insert({
