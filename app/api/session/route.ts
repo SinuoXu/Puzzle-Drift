@@ -69,14 +69,15 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       if (parsed.normalized === "nono") {
-        const { data: existingUsers, error: usersError } = await db
+        const { data: existingAdmins, error: adminError } = await db
           .from("app_users")
           .select("id")
+          .eq("is_admin", true)
           .limit(1);
 
-        if (usersError) throw new Error(usersError.message);
+        if (adminError) throw new Error(adminError.message);
 
-        if ((existingUsers ?? []).length > 0) {
+        if ((existingAdmins ?? []).length > 0) {
           return NextResponse.json(
             { error: "管理员账号需由已有管理员恢复。" },
             { status: 403 }
