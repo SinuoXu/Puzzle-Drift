@@ -33,7 +33,8 @@ export async function GET() {
 
     if (itemError) throw new Error(itemError.message);
 
-    const creatorIds = Array.from(new Set((items ?? []).map((item) => item.created_by)));
+    const itemRows: any[] = (items ?? []) as any[];
+    const creatorIds = Array.from(new Set(itemRows.map((item: any) => item.created_by)));
     const usernameMap = new Map<string, string>();
 
     if (creatorIds.length > 0) {
@@ -46,7 +47,7 @@ export async function GET() {
       for (const user of users ?? []) usernameMap.set(user.id, user.username);
     }
 
-    const responseItems = (items ?? []).map((item) => ({
+    const responseItems = itemRows.map((item: any) => ({
       id: item.id,
       content: item.content,
       created_by: item.created_by,

@@ -1,6 +1,6 @@
 {
   "name": "puzzle-drift",
-  "version": "0.3.0",
+  "version": "0.4.0-edgeone",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@edgeone/pages-blob": "^0.0.16",
     "@supabase/supabase-js": "^2.0.0",
     "bcryptjs": "^3.0.3",
     "next": "^16.0.0",

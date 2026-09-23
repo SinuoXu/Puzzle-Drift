@@ -40,23 +40,30 @@ export async function GET() {
     if (journeyResult.error) throw new Error(journeyResult.error.message);
     if (activityResult.error) throw new Error(activityResult.error.message);
 
-    const users = usersResult.data ?? [];
-    const userMap = new Map(users.map((user) => [user.id, user]));
-    const rawPuzzles = puzzlesResult.data ?? [];
-    const puzzleMap = new Map(rawPuzzles.map((puzzle) => [puzzle.id, puzzle]));
-    const journeyByPuzzle = new Map<string, typeof journeyResult.data>();
+    const users: any[] = (usersResult.data ?? []) as any[];
+    const userMap = new Map<string, any>(
+      users.map((user: any) => [user.id, user])
+    );
 
-    for (const entry of journeyResult.data ?? []) {
+    const rawPuzzles: any[] = (puzzlesResult.data ?? []) as any[];
+    const puzzleMap = new Map<string, any>(
+      rawPuzzles.map((puzzle: any) => [puzzle.id, puzzle])
+    );
+
+    const journeyRows: any[] = (journeyResult.data ?? []) as any[];
+    const journeyByPuzzle = new Map<string, any[]>();
+
+    for (const entry of journeyRows) {
       const list = journeyByPuzzle.get(entry.puzzle_id) ?? [];
       list.push(entry);
       journeyByPuzzle.set(entry.puzzle_id, list);
     }
 
-    const puzzles = rawPuzzles.map((puzzle) => {
+    const puzzles = rawPuzzles.map((puzzle: any) => {
       const owner = userMap.get(puzzle.owner_id);
       const holder = userMap.get(puzzle.current_holder_id);
       const rawJourney = journeyByPuzzle.get(puzzle.id) ?? [];
-      const waitingCount = rawJourney.filter((entry) => entry.status === "waiting").length;
+      const waitingCount = rawJourney.filter((entry: any) => entry.status === "waiting").length;
 
       const driftState = puzzle.availability === "retired" ? "retired" : "drifting";
 
@@ -67,7 +74,7 @@ export async function GET() {
         current_holder_name: holder?.username ?? "未知用户",
         drift_state: driftState,
         waiting_count: waitingCount,
-        journey: rawJourney.map((entry) => {
+        journey: rawJourney.map((entry: any) => {
           const user = userMap.get(entry.user_id);
           return {
             id: entry.id,
@@ -85,7 +92,8 @@ export async function GET() {
       };
     });
 
-    const activities = (activityResult.data ?? []).map((activity) => {
+    const activityRows: any[] = (activityResult.data ?? []) as any[];
+    const activities = activityRows.map((activity: any) => {
       const actor = activity.actor_id ? userMap.get(activity.actor_id) : null;
       const puzzle = puzzleMap.get(activity.puzzle_id);
       return {

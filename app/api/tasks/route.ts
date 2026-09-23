@@ -11,19 +11,23 @@ export async function GET() {
     .select("id, puzzle_id, journey_id, kind, amount_cents, payee_id, created_at")
     .eq("user_id", user.id).eq("status", "open").order("created_at");
   if (error) return NextResponse.json({ error: "读取待办失败。" }, { status: 500 });
-  const taskRows = tasks ?? [];
-  const userIds = [...new Set(taskRows.map((task) => task.payee_id).filter(Boolean))];
-  const puzzleIds = [...new Set(taskRows.map((task) => task.puzzle_id))];
+  const taskRows: any[] = (tasks ?? []) as any[];
+  const userIds = [...new Set(taskRows.map((task: any) => task.payee_id).filter(Boolean))];
+  const puzzleIds = [...new Set(taskRows.map((task: any) => task.puzzle_id))];
   const [puzzlesResult, journeysResult] = await Promise.all([
     puzzleIds.length ? db.from("puzzles").select("id, name, owner_id").in("id", puzzleIds) : Promise.resolve({ data: [], error: null }),
     puzzleIds.length ? db.from("puzzle_journey").select("id, puzzle_id, user_id, seq, status").in("puzzle_id", puzzleIds) : Promise.resolve({ data: [], error: null }),
   ]);
   if (puzzlesResult.error || journeysResult.error) return NextResponse.json({ error: "读取待办详情失败。" }, { status: 500 });
 
-  const puzzles = puzzlesResult.data ?? [];
-  const journeys = journeysResult.data ?? [];
-  const puzzleMap = new Map(puzzles.map((puzzle) => [puzzle.id, puzzle]));
-  const journeyMap = new Map(journeys.map((journey) => [journey.id, journey]));
+  const puzzles: any[] = (puzzlesResult.data ?? []) as any[];
+  const journeys: any[] = (journeysResult.data ?? []) as any[];
+  const puzzleMap = new Map<string, any>(
+    puzzles.map((puzzle: any) => [puzzle.id, puzzle])
+  );
+  const journeyMap = new Map<string, any>(
+    journeys.map((journey: any) => [journey.id, journey])
+  );
   const recipientIds = new Set(userIds as string[]);
   for (const task of taskRows) {
     if (task.kind !== "ship" && task.kind !== "shipping_fee") continue;
@@ -37,9 +41,11 @@ export async function GET() {
   const { data: people, error: peopleError } = recipientIds.size ? await db.from("app_users")
     .select("id, username, payment_qr_url, shipping_address").in("id", [...recipientIds]) : { data: [], error: null };
   if (peopleError) return NextResponse.json({ error: "读取待办联系人失败。" }, { status: 500 });
-  const peopleMap = new Map((people ?? []).map((person) => [person.id, person]));
+  const peopleMap = new Map<string, any>(
+    ((people ?? []) as any[]).map((person: any) => [person.id, person])
+  );
 
-  const enriched = taskRows.map((task) => {
+  const enriched = taskRows.map((task: any) => {
     let destination: { username: string; shipping_address: string | null } | null = null;
     if (task.kind === "ship" || task.kind === "shipping_fee") {
       const turn = task.journey_id ? journeyMap.get(task.journey_id) : null;
