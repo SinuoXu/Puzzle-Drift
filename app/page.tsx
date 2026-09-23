@@ -400,7 +400,17 @@ export default function Home() {
           onOpenUser={setSelectedUserId}
         />
       )}
-      {selectedUserId && <UserProfileModal userId={selectedUserId} onClose={() => setSelectedUserId(null)} />}
+      {selectedUserId && (
+        <UserProfileModal
+          userId={selectedUserId}
+          currentUser={user}
+          onClose={() => setSelectedUserId(null)}
+          onDeleted={async () => {
+            setSelectedUserId(null);
+            await mutationCompleted();
+          }}
+        />
+      )}
     </main>
   );
 }

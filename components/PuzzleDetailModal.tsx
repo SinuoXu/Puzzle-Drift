@@ -179,7 +179,7 @@ export function PuzzleDetailModal({
   }
 
   async function deletePuzzle() {
-    if (!window.confirm(`删除《${puzzle.name}》？这会删除这张拼图、流转记录、待办和相关消息，不能恢复。已上传的图片会保留在 Storage 中。`)) return;
+    if (!window.confirm(`删除《${puzzle.name}》？这会删除这张拼图、流转记录、待办、相关消息以及关联图片，不能恢复。`)) return;
     setBusy(true);
     setError("");
     try {
