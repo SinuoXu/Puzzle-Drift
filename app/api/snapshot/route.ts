@@ -112,6 +112,12 @@ export async function GET() {
     return NextResponse.json(
       {
         user: currentUser,
+        members: users.map((member: any) => ({
+          id: member.id,
+          username: member.username,
+          avatar_url: member.avatar_url ?? null,
+          is_admin: Boolean(member.is_admin),
+        })),
         puzzles,
         activities,
       },

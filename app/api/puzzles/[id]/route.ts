@@ -49,7 +49,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     const input = body as Record<string, unknown>;
-    const update: Record<string, string> = {};
+    const update: Record<string, string | number | boolean> = {};
 
     if ("name" in input) {
       const name = cleanText(input.name, 80);
@@ -67,6 +67,28 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       const description = cleanText(input.description, 1000);
       if (description === null) return NextResponse.json({ error: "介绍最多 1000 字。" }, { status: 400 });
       update.description = description;
+    }
+
+    if ("piece_count" in input) {
+      const pieceCount = Number(input.piece_count);
+      if (!Number.isSafeInteger(pieceCount) || pieceCount <= 0 || pieceCount > 100000) {
+        return NextResponse.json({ error: "请填写正确的拼图片数。" }, { status: 400 });
+      }
+      update.piece_count = pieceCount;
+    }
+
+    if ("has_box" in input) {
+      if (typeof input.has_box !== "boolean") {
+        return NextResponse.json({ error: "盒子状态格式不正确。" }, { status: 400 });
+      }
+      update.has_box = input.has_box;
+    }
+
+    if ("has_sheet" in input) {
+      if (typeof input.has_sheet !== "boolean") {
+        return NextResponse.json({ error: "图纸状态格式不正确。" }, { status: 400 });
+      }
+      update.has_sheet = input.has_sheet;
     }
 
     if ("availability" in input) {

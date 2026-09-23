@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Avatar } from "@/components/Avatar";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { uploadImage } from "@/lib/client-image";
 import type { Puzzle, User } from "@/lib/types";
 
@@ -37,6 +38,10 @@ export function PuzzleDetailModal({
   const [name, setName] = useState(puzzle.name);
   const [brand, setBrand] = useState(puzzle.brand);
   const [description, setDescription] = useState(puzzle.description);
+  const [pieceCount, setPieceCount] = useState(String(puzzle.piece_count ?? ""));
+  const [hasBox, setHasBox] = useState(puzzle.has_box);
+  const [hasSheet, setHasSheet] = useState(puzzle.has_sheet);
+  const [coverPreview, setCoverPreview] = useState(false);
   const [availability, setAvailability] = useState(puzzle.availability);
 
   const [retentionMode, setRetentionMode] = useState<"received" | "shipped" | null>(null);
@@ -144,7 +149,15 @@ export function PuzzleDetailModal({
       await call(`/api/puzzles/${puzzle.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, brand, description, ...(puzzle.availability === "retired" ? {} : { availability }) }),
+        body: JSON.stringify({
+          name,
+          brand,
+          description,
+          piece_count: Number(pieceCount),
+          has_box: hasBox,
+          has_sheet: hasSheet,
+          ...(puzzle.availability === "retired" ? {} : { availability }),
+        }),
       });
       setEditing(false);
     } catch {
@@ -243,8 +256,19 @@ export function PuzzleDetailModal({
       <div className="modalCard modalWide" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detailTop">
           <div className="detailCoverColumn">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="detailCover" src={puzzle.cover_url} alt={puzzle.name} />
+            <button
+              type="button"
+              className="detailCoverButton"
+              onClick={() => setCoverPreview(true)}
+              aria-label="预览原图"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="detailCover"
+                src={puzzle.cover_url}
+                alt={puzzle.name}
+              />
+            </button>
           </div>
 
           <div className="detailInfo">
@@ -401,6 +425,39 @@ export function PuzzleDetailModal({
                   <span>品牌</span>
                   <input value={brand} maxLength={80} onChange={(event) => setBrand(event.target.value)} />
                 </label>
+
+                <label>
+                  <span>片数</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100000}
+                    step={1}
+                    value={pieceCount}
+                    onChange={(event) => setPieceCount(event.target.value)}
+                  />
+                </label>
+
+                <div className="featureChecks editWide">
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={hasBox}
+                      onChange={(event) => setHasBox(event.target.checked)}
+                    />
+                    <span>有盒</span>
+                  </label>
+
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={hasSheet}
+                      onChange={(event) => setHasSheet(event.target.checked)}
+                    />
+                    <span>有图纸</span>
+                  </label>
+                </div>
+
                 <label className="editWide">
                   <span>介绍</span>
                   <textarea rows={3} value={description} maxLength={1000} onChange={(event) => setDescription(event.target.value)} />
@@ -428,6 +485,14 @@ export function PuzzleDetailModal({
           </section>
         )}
       </div>
+
+      {coverPreview && (
+        <ImageLightbox
+          src={puzzle.cover_url}
+          alt={puzzle.name}
+          onClose={() => setCoverPreview(false)}
+        />
+      )}
     </div>
   );
 }

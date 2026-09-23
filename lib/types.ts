@@ -6,6 +6,13 @@ export type User = {
   profile_required: boolean;
 };
 
+export type Member = {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+  is_admin: boolean;
+};
+
 export type JourneyEntry = {
   id: string;
   user_id: string;
@@ -56,6 +63,7 @@ export type Activity = {
 
 export type Snapshot = {
   user: User;
+  members: Member[];
   puzzles: Puzzle[];
   activities: Activity[];
 };

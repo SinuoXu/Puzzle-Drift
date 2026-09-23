@@ -350,3 +350,316 @@ textarea { resize: vertical; }
   color: var(--muted);
   font-size: 12px;
 }
+
+
+/* ==========================================================
+   V0.4 responsive layout / natural images / member list
+   ========================================================== */
+
+.appContent {
+  width: min(1500px, calc(100% - 48px));
+}
+
+/* Desktop: puzzles 4 per row, tasks 2 per row */
+.puzzleGrid,
+.compactGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+}
+
+.taskList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Preserve uploaded image aspect ratio. */
+.puzzleCard {
+  align-self: start;
+}
+
+.puzzleCoverButton {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: #eeeae2;
+  cursor: zoom-in;
+}
+
+.puzzleCoverWrap {
+  aspect-ratio: auto;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #eeeae2;
+}
+
+.puzzleCover {
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+}
+
+.puzzleCardInteractiveBody {
+  cursor: pointer;
+  outline: none;
+}
+
+.puzzleCardInteractiveBody:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.detailCoverColumn {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.detailCoverButton {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.detailCover {
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+  aspect-ratio: auto;
+  object-fit: contain;
+  background: #ece9e2;
+}
+
+/* Member list */
+.membersPanel {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.membersToggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 4px 0;
+  text-align: left;
+}
+
+.membersToggle strong {
+  min-width: 28px;
+  text-align: center;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.membersToggle span:last-child {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.membersList {
+  margin-top: 10px;
+  display: grid;
+  gap: 5px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.memberRow {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.memberRow:hover {
+  background: var(--surface-2);
+}
+
+.memberName {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.memberAdmin {
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+  background: var(--green-soft);
+  border-radius: 999px;
+  padding: 3px 6px;
+}
+
+/* Registration control is deliberately visible in realtime sidebar. */
+.registrationControl {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.registrationControl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.registrationControl > div > strong {
+  font-size: 11px;
+}
+
+.registrationControl button {
+  width: 100%;
+}
+
+.registrationControl p {
+  margin: 0;
+  color: var(--danger);
+  font-size: 10px;
+}
+
+/* Image preview */
+.imageLightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(12, 12, 12, 0.94);
+  display: flex;
+  flex-direction: column;
+}
+
+.imageLightboxToolbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.imageLightboxToolbar button,
+.imageLightboxToolbar a {
+  border: 1px solid rgba(255,255,255,.22);
+  background: rgba(255,255,255,.1);
+  color: white;
+  border-radius: 9px;
+  padding: 7px 11px;
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.imageLightboxStage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  touch-action: pinch-zoom;
+}
+
+.imageLightboxStage img {
+  display: block;
+  max-width: 92vw;
+  max-height: 84vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transform-origin: center center;
+  transition: transform .12s ease;
+  user-select: none;
+}
+
+@media (max-width: 1000px) {
+  .puzzleGrid,
+  .compactGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Mobile requirement:
+   - puzzle cards: 2 per row
+   - tasks: 1 per row
+*/
+@media (max-width: 620px) {
+  .appContent {
+    width: calc(100% - 18px);
+  }
+
+  .puzzleGrid,
+  .compactGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .taskList {
+    grid-template-columns: 1fr;
+  }
+
+  .puzzleCardBody {
+    padding: 10px;
+  }
+
+  .puzzleCard h3 {
+    font-size: 14px;
+  }
+
+  .puzzleCardTitleRow {
+    gap: 5px;
+  }
+
+  .queueCount {
+    font-size: 8px;
+    padding: 4px 5px;
+  }
+
+  .puzzleMeta {
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .puzzleMeta span {
+    padding: 3px 5px;
+    font-size: 8px;
+  }
+
+  .ownerLine {
+    margin-top: 9px;
+    font-size: 9px;
+  }
+
+  .imageLightboxToolbar {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .imageLightboxStage {
+    padding: 10px;
+  }
+
+  .imageLightboxStage img {
+    max-width: 96vw;
+    max-height: 82vh;
+  }
+}

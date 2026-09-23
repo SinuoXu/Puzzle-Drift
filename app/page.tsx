@@ -11,6 +11,8 @@ import { PuzzleDetailModal } from "@/components/PuzzleDetailModal";
 import { ProfilePanel } from "@/components/ProfilePanel";
 import { TasksPanel } from "@/components/TasksPanel";
 import { UserProfileModal } from "@/components/UserProfileModal";
+import { MembersPanel } from "@/components/MembersPanel";
+import { RegistrationControl } from "@/components/RegistrationControl";
 import { getRealtimeClient } from "@/lib/realtime-client";
 import type { Puzzle, Snapshot, User } from "@/lib/types";
 
@@ -102,7 +104,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [brand, setBrand] = useState("all");
   const [owner, setOwner] = useState("all");
-  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("drifting");
   const [globalError, setGlobalError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -229,7 +231,7 @@ export default function Home() {
     return <LoginScreen onLogin={async () => loadSnapshot()} />;
   }
 
-  const { user, puzzles, activities } = snapshot;
+  const { user, members, puzzles, activities } = snapshot;
   const myOwned = puzzles.filter((puzzle) => puzzle.owner_id === user.id);
   const myHolding = puzzles.filter((puzzle) => puzzle.current_holder_id === user.id && puzzle.owner_id !== user.id);
   const myQueued = puzzles.filter((puzzle) => puzzle.journey.some((row) => row.user_id === user.id && row.status === "waiting"));
@@ -290,14 +292,32 @@ export default function Home() {
               <div>
                 <ActivityFeed activities={activities} isAdmin={user.is_admin} onOpenPuzzle={setSelectedPuzzleId} onOpenUser={setSelectedUserId} onChanged={mutationCompleted} />
               </div>
-              <aside className="sidebarCard">
+              <aside className="sidebarCard realtimeSidebar">
                 <p className="eyebrow">实时状态</p>
                 <h3>{puzzles.length} 张拼图</h3>
+
                 <div className="statsGrid">
-                  <div><strong>{puzzles.filter((p) => p.drift_state === "drifting").length}</strong><span>正在漂</span></div>
-                  <div><strong>{puzzles.reduce((sum, p) => sum + p.waiting_count, 0)}</strong><span>排队中</span></div>
+                  <div>
+                    <strong>{puzzles.filter((p) => p.drift_state === "drifting").length}</strong>
+                    <span>正在漂</span>
+                  </div>
+
+                  <div>
+                    <strong>{puzzles.reduce((sum, p) => sum + p.waiting_count, 0)}</strong>
+                    <span>排队中</span>
+                  </div>
                 </div>
-                <p className="sidebarNote">页面变更会通过实时消息通知其他在线设备；即使实时连接中断，也会每 10 秒自动校准一次。</p>
+
+                <MembersPanel
+                  members={members}
+                  onOpenUser={setSelectedUserId}
+                />
+
+                {user.is_admin && <RegistrationControl />}
+
+                <p className="sidebarNote">
+                  页面变更会自动同步；即使连接短暂中断，也会定时重新校准。
+                </p>
               </aside>
             </div>
           </section>
