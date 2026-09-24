@@ -187,6 +187,10 @@ export async function replaceState(next: EdgeState): Promise<void> {
   });
 }
 
+export function getDataStore() {
+  return openDataStore();
+}
+
 export function getImageStore() {
   return openImageStore();
 }

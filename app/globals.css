@@ -1014,3 +1014,136 @@ textarea { resize: vertical; }
     overflow: hidden;
   }
 }
+
+
+/* ==========================================================
+   Administrator Blob storage usage
+   ========================================================== */
+
+.storageUsage {
+  display: grid;
+  gap: 9px;
+  padding: 10px 0;
+}
+
+.storageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storageHeader > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.storageHeader span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.storageHeader small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.storageHeader > strong {
+  font-size: 13px;
+}
+
+.storageMainNumber {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.storageMainNumber strong {
+  font-size: 20px;
+}
+
+.storageMainNumber span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.storageBar {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #ebe8e0;
+}
+
+.storageBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width .25s ease;
+}
+
+.storage-warning .storageBar span {
+  background: var(--amber);
+}
+
+.storage-danger .storageBar span {
+  background: var(--danger);
+}
+
+.storageRows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.storageRows > div {
+  padding: 7px 8px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.storageRows span,
+.storageRows small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.storageRows strong {
+  font-size: 11px;
+}
+
+.storageTimestamp,
+.storageFootnote,
+.storageMuted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.storageWarningText {
+  margin: 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.storage-danger .storageWarningText {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.storageError {
+  margin: 0;
+  color: var(--danger);
+  font-size: 9px;
+}
