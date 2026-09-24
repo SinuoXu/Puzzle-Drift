@@ -425,6 +425,8 @@ export function PuzzleDetailModal({
           ),
         );
       }
+
+      await onChanged();
     } catch (err) {
       setError(
         err instanceof Error

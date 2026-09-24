@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { canonicalizeKnownBrand } from "@/lib/brands";
+import { readState } from "@/lib/edgeone-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,14 @@ export async function GET() {
     if (journeyResult.error) throw new Error(journeyResult.error.message);
     if (activityResult.error) throw new Error(activityResult.error.message);
 
+    const state = await readState();
+
+    const likedPuzzleIds = new Set(
+      state.puzzle_likes
+        .filter((like) => like.user_id === currentUser.id)
+        .map((like) => like.puzzle_id),
+    );
+
     const users: any[] = (usersResult.data ?? []) as any[];
     const userMap = new Map<string, any>(
       users.map((user: any) => [user.id, user])
@@ -76,6 +85,7 @@ export async function GET() {
         current_holder_name: holder?.username ?? "未知用户",
         drift_state: driftState,
         waiting_count: waitingCount,
+        liked_by_me: likedPuzzleIds.has(puzzle.id),
         journey: rawJourney.map((entry: any) => {
           const user = userMap.get(entry.user_id);
           return {

@@ -40,6 +40,12 @@ function retryCount(path: string, method: string): number {
   if (method === "POST" && path === "/api/upload") return 10;
   if (method === "PATCH" && path === "/api/admin/registration") return 10;
 
+  // Like/unlike is idempotent because the client sends the desired final state.
+  if (
+    method === "PUT" &&
+    /^\/api\/puzzles\/[^/]+\/likes$/.test(path)
+  ) return 10;
+
   // Logging out is idempotent.
   if (method === "DELETE" && path === "/api/session") return 3;
 

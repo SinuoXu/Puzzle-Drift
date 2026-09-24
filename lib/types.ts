@@ -46,6 +46,7 @@ export type Puzzle = {
   drift_state: "drifting" | "retired";
   in_transit: boolean;
   waiting_count: number;
+  liked_by_me: boolean;
   journey: JourneyEntry[];
 };
 

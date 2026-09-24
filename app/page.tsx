@@ -108,6 +108,8 @@ export default function Home() {
   const [showProfile, setShowProfile] = useState(false);
   const [ownedOpen, setOwnedOpen] = useState(true);
   const [holdingOpen, setHoldingOpen] = useState(true);
+  const [queuedOpen, setQueuedOpen] = useState(true);
+  const [likedOpen, setLikedOpen] = useState(true);
   const [onboardingUser, setOnboardingUser] = useState<User | null>(null);
   const [search, setSearch] = useState("");
   const [brand, setBrand] = useState("all");
@@ -284,7 +286,17 @@ export default function Home() {
   const { user, members, puzzles, activities } = snapshot;
   const myOwned = puzzles.filter((puzzle) => puzzle.owner_id === user.id);
   const myHolding = puzzles.filter((puzzle) => puzzle.current_holder_id === user.id && puzzle.owner_id !== user.id);
-  const myQueued = puzzles.filter((puzzle) => puzzle.journey.some((row) => row.user_id === user.id && row.status === "waiting"));
+  const myQueued = puzzles.filter((puzzle) =>
+    puzzle.journey.some(
+      (row) =>
+        row.user_id === user.id &&
+        row.status === "waiting",
+    ),
+  );
+
+  const myLiked = puzzles.filter(
+    (puzzle) => puzzle.liked_by_me,
+  );
 
   async function logout() {
     await fetch("/api/session", { method: "DELETE" });
@@ -479,8 +491,79 @@ export default function Home() {
             </div>
 
             <div className="mySection">
-              <div className="subHeading"><h3>我的排队</h3><span>{myQueued.length}</span></div>
-              {myQueued.length > 0 ? <div className="puzzleGrid compactGrid">{myQueued.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />)}</div> : <div className="emptyPanel smallEmpty">你还没有排队。</div>}
+              <div className="subHeading">
+                <h3>我的排队</h3>
+                <span>{myQueued.length}</span>
+
+                <button
+                  type="button"
+                  className="collapseButton"
+                  onClick={() =>
+                    setQueuedOpen((value) => !value)
+                  }
+                >
+                  {queuedOpen ? "收起" : "展开"}
+                </button>
+              </div>
+
+              {queuedOpen && (
+                myQueued.length > 0
+                  ? (
+                    <div className="puzzleGrid compactGrid">
+                      {myQueued.map((p) => (
+                        <PuzzleCard
+                          key={p.id}
+                          puzzle={p}
+                          onOpen={setSelectedPuzzleId}
+                          onOpenUser={setSelectedUserId}
+                        />
+                      ))}
+                    </div>
+                  )
+                  : (
+                    <div className="emptyPanel smallEmpty">
+                      你还没有排队。
+                    </div>
+                  )
+              )}
+            </div>
+
+            <div className="mySection">
+              <div className="subHeading">
+                <h3>我的喜欢</h3>
+                <span>{myLiked.length}</span>
+
+                <button
+                  type="button"
+                  className="collapseButton"
+                  onClick={() =>
+                    setLikedOpen((value) => !value)
+                  }
+                >
+                  {likedOpen ? "收起" : "展开"}
+                </button>
+              </div>
+
+              {likedOpen && (
+                myLiked.length > 0
+                  ? (
+                    <div className="puzzleGrid compactGrid">
+                      {myLiked.map((p) => (
+                        <PuzzleCard
+                          key={p.id}
+                          puzzle={p}
+                          onOpen={setSelectedPuzzleId}
+                          onOpenUser={setSelectedUserId}
+                        />
+                      ))}
+                    </div>
+                  )
+                  : (
+                    <div className="emptyPanel smallEmpty">
+                      你还没有喜欢的拼图。
+                    </div>
+                  )
+              )}
             </div>
           </section>
         )}
