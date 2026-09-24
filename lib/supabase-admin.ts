@@ -510,10 +510,12 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
           return target;
         }
         case "v03_admin_force_retire": {
-          const admin = state.app_users.find((row) => row.id === args.p_admin_id && row.is_admin);
-          if (!admin) throw new Error("Admin required");
+          const actor = state.app_users.find((row) => row.id === args.p_admin_id);
           const puzzle = puzzleById(state, args.p_puzzle_id);
           if (!puzzle) throw new Error("Puzzle not found");
+          if (!actor || (!actor.is_admin && puzzle.owner_id !== actor.id)) {
+            throw new Error("Owner or admin required");
+          }
           const previous = puzzle.availability;
           for (const task of state.puzzle_tasks) {
             if (task.puzzle_id === puzzle.id && task.status === "open") {
@@ -530,14 +532,18 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
           return true;
         }
         case "v03_admin_delete_puzzle": {
-          const admin = state.app_users.find((row) => row.id === args.p_admin_id && row.is_admin);
-          if (!admin) throw new Error("Admin required");
-          if (!puzzleById(state, args.p_puzzle_id)) throw new Error("Puzzle not found");
+          const actor = state.app_users.find((row) => row.id === args.p_admin_id);
+          const puzzle = puzzleById(state, args.p_puzzle_id);
+          if (!puzzle) throw new Error("Puzzle not found");
+          if (!actor || (!actor.is_admin && puzzle.owner_id !== actor.id)) {
+            throw new Error("Owner or admin required");
+          }
           state.puzzle_tasks = state.puzzle_tasks.filter((row) => row.puzzle_id !== args.p_puzzle_id);
           state.puzzle_handoffs = state.puzzle_handoffs.filter((row) => row.puzzle_id !== args.p_puzzle_id);
           state.puzzle_journey = state.puzzle_journey.filter((row) => row.puzzle_id !== args.p_puzzle_id);
           state.puzzle_activity = state.puzzle_activity.filter((row) => row.puzzle_id !== args.p_puzzle_id);
           state.puzzle_comments = state.puzzle_comments.filter((row) => row.puzzle_id !== args.p_puzzle_id);
+          state.puzzle_likes = state.puzzle_likes.filter((row) => row.puzzle_id !== args.p_puzzle_id);
           state.puzzles = state.puzzles.filter((row) => row.id !== args.p_puzzle_id);
           return true;
         }

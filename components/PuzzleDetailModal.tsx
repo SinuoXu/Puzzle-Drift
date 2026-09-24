@@ -62,6 +62,15 @@ export function PuzzleDetailModal({
   const [commentText, setCommentText] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
 
+  const [likes, setLikes] = useState<{
+    id: string;
+    user_id: string;
+    username: string;
+    avatar_url: string | null;
+    created_at: string;
+  }[]>([]);
+  const [likeBusy, setLikeBusy] = useState(false);
+
   const [retentionMode, setRetentionMode] = useState<"received" | "shipped" | null>(null);
   const [retentionDate, setRetentionDate] = useState(todayString());
   const [retentionNote, setRetentionNote] = useState("");
@@ -112,6 +121,37 @@ export function PuzzleDetailModal({
   }, [puzzle.id, puzzle.updated_at]);
 
   useEffect(() => {
+    let active = true;
+
+    void fetch(
+      `/api/puzzles/${puzzle.id}/likes`,
+      { cache: "no-store" },
+    )
+      .then(async (response) => {
+        const data = await response
+          .json()
+          .catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ?? "读取喜欢失败。",
+          );
+        }
+
+        if (active) {
+          setLikes(data.likes ?? []);
+        }
+      })
+      .catch(() => {
+        // Likes are secondary content.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [puzzle.id]);
+
+  useEffect(() => {
     if (!feeOpen) return;
     setFeeDestination(null);
     void fetch("/api/tasks", { cache: "no-store" }).then(async (response) => {
@@ -141,6 +181,10 @@ export function PuzzleDetailModal({
     if (puzzle.availability === "retired") return "退役";
     return puzzle.in_transit ? "正在漂 · 运输中" : "正在漂";
   }, [puzzle]);
+
+  const likedByMe = likes.some(
+    (row) => row.user_id === currentUser.id,
+  );
 
   async function call(url: string, init: RequestInit) {
     setBusy(true);
@@ -317,6 +361,81 @@ export function PuzzleDetailModal({
     finally { setBusy(false); }
   }
 
+  async function toggleLike() {
+    if (likeBusy) return;
+
+    const nextLiked = !likedByMe;
+
+    setLikeBusy(true);
+    setError("");
+
+    try {
+      const response = await fetch(
+        `/api/puzzles/${puzzle.id}/likes`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            liked: nextLiked,
+          }),
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ?? "操作失败。",
+        );
+      }
+
+      if (nextLiked) {
+        setLikes((old) => {
+          if (
+            old.some(
+              (row) =>
+                row.user_id === currentUser.id,
+            )
+          ) {
+            return old;
+          }
+
+          return [
+            ...old,
+            {
+              id: `local-${currentUser.id}`,
+              user_id: currentUser.id,
+              username: currentUser.username,
+              avatar_url:
+                currentUser.avatar_url ?? null,
+              created_at:
+                new Date().toISOString(),
+            },
+          ];
+        });
+      } else {
+        setLikes((old) =>
+          old.filter(
+            (row) =>
+              row.user_id !== currentUser.id,
+          ),
+        );
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "喜欢失败。",
+      );
+    } finally {
+      setLikeBusy(false);
+    }
+  }
+
   async function submitComment(event: FormEvent) {
     event.preventDefault();
 
@@ -397,6 +516,126 @@ export function PuzzleDetailModal({
               </div>
               <button type="button" className="iconButton" onClick={onClose} aria-label="关闭">×</button>
             </div>
+
+            <div className="puzzleSocialBar">
+              <button
+                type="button"
+                className={`likeButton ${likedByMe ? "liked" : ""}`}
+                disabled={likeBusy}
+                onClick={() => void toggleLike()}
+                aria-label={likedByMe ? "取消喜欢" : "喜欢"}
+              >
+                <span className="heartIcon">
+                  {likedByMe ? "♥" : "♡"}
+                </span>
+                <span>
+                  {likes.length > 0
+                    ? likes.length
+                    : "喜欢"}
+                </span>
+              </button>
+
+              {likes.length > 0 && (
+                <div className="likeAvatars">
+                  {likes.slice(0, 8).map((like) => (
+                    <button
+                      type="button"
+                      className="likeAvatarButton"
+                      key={like.user_id}
+                      title={like.username}
+                      onClick={() =>
+                        onOpenUser(like.user_id)
+                      }
+                    >
+                      <Avatar
+                        name={like.username}
+                        url={like.avatar_url}
+                        size={24}
+                      />
+                    </button>
+                  ))}
+
+                  {likes.length > 8 && (
+                    <span className="moreLikes">
+                      +{likes.length - 8}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="commentToggleCompact"
+                onClick={() =>
+                  setCommentOpen((value) => !value)
+                }
+              >
+                留言
+                {comments.length > 0
+                  ? ` ${comments.length}`
+                  : ""}
+              </button>
+            </div>
+
+            {(commentOpen || comments.length > 0) && (
+              <div className="compactCommentArea">
+                {commentOpen && (
+                  <form
+                    className="compactCommentForm"
+                    onSubmit={submitComment}
+                  >
+                    <input
+                      maxLength={300}
+                      value={commentText}
+                      placeholder="写一句留言…"
+                      onChange={(event) =>
+                        setCommentText(
+                          event.target.value,
+                        )
+                      }
+                    />
+
+                    <button
+                      type="submit"
+                      className="primaryButton"
+                      disabled={
+                        commentBusy ||
+                        !commentText.trim()
+                      }
+                    >
+                      {commentBusy
+                        ? "…"
+                        : "发送"}
+                    </button>
+                  </form>
+                )}
+
+                {comments.length > 0 && (
+                  <div className="compactCommentList">
+                    {comments.map((comment) => (
+                      <div
+                        className="compactCommentRow"
+                        key={comment.id}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpenUser(
+                              comment.user_id,
+                            )
+                          }
+                        >
+                          {comment.username}:
+                        </button>
+                        <span>
+                          {comment.content}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="ownerLine ownerLineLarge">
               <Avatar name={puzzle.owner_name} url={puzzle.owner_avatar_url} size={34} onOpen={() => onOpenUser(puzzle.owner_id)} />
@@ -597,84 +836,36 @@ export function PuzzleDetailModal({
                 </div>
               </form>
             )}
-            {currentUser.is_admin && (
-              <div className="adminDangerZone">
-                <p>管理员操作</p>
-                {puzzle.availability !== "retired" && <button type="button" className="dangerButton" disabled={busy} onClick={() => void forceEnd()}>强制结束拼图</button>}
-                <button type="button" className="dangerButton" disabled={busy} onClick={() => void deletePuzzle()}>删除拼图</button>
-              </div>
-            )}
+            <div className="adminDangerZone">
+              <p>
+                {currentUser.is_admin
+                  ? "管理员 / 图主管理"
+                  : "图主管理"}
+              </p>
+
+              {puzzle.availability !== "retired" && (
+                <button
+                  type="button"
+                  className="dangerButton"
+                  disabled={busy}
+                  onClick={() => void forceEnd()}
+                >
+                  强制结束拼图
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="dangerButton"
+                disabled={busy}
+                onClick={() => void deletePuzzle()}
+              >
+                删除拼图
+              </button>
+            </div>
           </section>
         )}
 
-        <section className="detailSection commentsSection">
-          <div className="sectionHeading">
-            <div>
-              <p className="eyebrow">Comments</p>
-              <h3>留言</h3>
-            </div>
-
-            <button
-              type="button"
-              className="secondaryButton commentButton"
-              onClick={() =>
-                setCommentOpen((value) => !value)
-              }
-            >
-              {commentOpen ? "取消" : "留言"}
-            </button>
-          </div>
-
-          {commentOpen && (
-            <form
-              className="commentForm"
-              onSubmit={submitComment}
-            >
-              <textarea
-                rows={2}
-                maxLength={300}
-                value={commentText}
-                placeholder="写一句留言…"
-                onChange={(event) =>
-                  setCommentText(event.target.value)
-                }
-              />
-
-              <button
-                type="submit"
-                className="primaryButton"
-                disabled={
-                  commentBusy ||
-                  !commentText.trim()
-                }
-              >
-                {commentBusy
-                  ? "发送中…"
-                  : "发送"}
-              </button>
-            </form>
-          )}
-
-          {comments.length > 0 ? (
-            <div className="commentList">
-              {comments.map((comment) => (
-                <div
-                  className="commentRow"
-                  key={comment.id}
-                >
-                  <strong>
-                    {comment.username}:
-                  </strong>
-                  <span>{comment.content}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="commentEmpty">
-              还没有留言。
-            </p>
-          )}
-        </section>
       </div>
 
       {coverPreview && (

@@ -867,3 +867,150 @@ textarea { resize: vertical; }
     width: 100%;
   }
 }
+
+
+/* ==========================================================
+   Compact likes + comments near puzzle title
+   ========================================================== */
+
+.puzzleSocialBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 7px;
+  min-height: 28px;
+}
+
+.likeButton,
+.commentToggleCompact {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.likeButton:hover,
+.commentToggleCompact:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.likeButton.liked {
+  color: #b34b5c;
+}
+
+.heartIcon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.likeAvatars {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.likeAvatarButton {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin-left: -5px;
+  border-radius: 50%;
+  display: inline-flex;
+}
+
+.likeAvatarButton:first-child {
+  margin-left: 0;
+}
+
+.likeAvatarButton .avatar {
+  box-shadow:
+    0 0 0 2px var(--surface);
+}
+
+.moreLikes {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.compactCommentArea {
+  margin-top: 5px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.compactCommentForm {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.compactCommentForm input {
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.compactCommentForm .primaryButton {
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 9px;
+}
+
+.compactCommentList {
+  max-height: 88px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.compactCommentRow {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.compactCommentRow button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 0;
+}
+
+.compactCommentRow span {
+  min-width: 0;
+  word-break: break-word;
+  color: var(--text);
+}
+
+@media (max-width: 620px) {
+  .puzzleSocialBar {
+    gap: 5px;
+  }
+
+  .compactCommentForm {
+    grid-template-columns: 1fr auto;
+  }
+
+  .likeAvatars {
+    max-width: 150px;
+    overflow: hidden;
+  }
+}

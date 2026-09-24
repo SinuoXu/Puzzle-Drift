@@ -223,6 +223,12 @@ export async function DELETE(
         row.user_id !== id,
     );
 
+    state.puzzle_likes = state.puzzle_likes.filter(
+      (row) =>
+        !ownedPuzzleIds.has(row.puzzle_id) &&
+        row.user_id !== id,
+    );
+
     state.puzzle_journey = state.puzzle_journey.filter(
       (row) =>
         !ownedPuzzleIds.has(row.puzzle_id) &&

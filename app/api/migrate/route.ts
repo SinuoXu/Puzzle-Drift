@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
       puzzle_tasks: tableMap.puzzle_tasks,
       puzzle_handoffs: tableMap.puzzle_handoffs,
       puzzle_comments: [],
+      puzzle_likes: [],
       counters: { puzzle_activity: maxActivity + 1 },
       metadata: { migrated_from_supabase_at: new Date().toISOString() },
     };

@@ -12,6 +12,7 @@ export type EdgeState = {
   puzzle_tasks: Record<string, any>[];
   puzzle_handoffs: Record<string, any>[];
   puzzle_comments: Record<string, any>[];
+  puzzle_likes: Record<string, any>[];
   counters: { puzzle_activity: number };
   metadata?: Record<string, any>;
 };
@@ -41,6 +42,7 @@ function emptyState(): EdgeState {
     puzzle_tasks: [],
     puzzle_handoffs: [],
     puzzle_comments: [],
+    puzzle_likes: [],
     counters: { puzzle_activity: 1 },
     metadata: { registration_open: true },
   };
@@ -58,6 +60,7 @@ function normalizeState(input: any): EdgeState {
     "puzzle_tasks",
     "puzzle_handoffs",
     "puzzle_comments",
+    "puzzle_likes",
   ] as const) {
     if (!Array.isArray(state[key])) state[key] = [] as never;
   }
