@@ -217,6 +217,12 @@ export async function DELETE(
         row.actor_id !== id,
     );
 
+    state.puzzle_comments = state.puzzle_comments.filter(
+      (row) =>
+        !ownedPuzzleIds.has(row.puzzle_id) &&
+        row.user_id !== id,
+    );
+
     state.puzzle_journey = state.puzzle_journey.filter(
       (row) =>
         !ownedPuzzleIds.has(row.puzzle_id) &&

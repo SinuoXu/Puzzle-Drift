@@ -15,9 +15,15 @@ import { MembersPanel } from "@/components/MembersPanel";
 import { RegistrationControl } from "@/components/RegistrationControl";
 import { getRealtimeClient } from "@/lib/realtime-client";
 import type { Puzzle, Snapshot, User } from "@/lib/types";
+import { canonicalizeKnownBrand } from "@/lib/brands";
 
 type Tab = "tasks" | "feed" | "library" | "mine";
-type LibraryFilter = "all" | "drifting" | "retired";
+type LibraryFilter =
+  | "all"
+  | "drifting"
+  | "retired"
+  | "no_queue"
+  | "next_you";
 
 function LoginScreen({ onLogin }: { onLogin: (user: User) => Promise<void> }) {
   const [username, setUsername] = useState("");
@@ -100,6 +106,8 @@ export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [showNewPuzzle, setShowNewPuzzle] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [ownedOpen, setOwnedOpen] = useState(true);
+  const [holdingOpen, setHoldingOpen] = useState(true);
   const [onboardingUser, setOnboardingUser] = useState<User | null>(null);
   const [search, setSearch] = useState("");
   const [brand, setBrand] = useState("all");
@@ -197,7 +205,13 @@ export default function Home() {
 
   const brands = useMemo(() => {
     if (!snapshot) return [];
-    return Array.from(new Set(snapshot.puzzles.map((p) => p.brand).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-CN"));
+    return Array.from(
+      new Set(
+        snapshot.puzzles
+          .map((p) => canonicalizeKnownBrand(p.brand))
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b, "zh-CN"));
   }, [snapshot]);
 
   const filteredPuzzles = useMemo(() => {
@@ -205,11 +219,47 @@ export default function Home() {
     const keyword = search.trim().toLowerCase();
 
     return snapshot.puzzles.filter((puzzle) => {
-      if (brand !== "all" && puzzle.brand !== brand) return false;
+      if (
+        brand !== "all" &&
+        canonicalizeKnownBrand(puzzle.brand) !== brand
+      ) return false;
+
       if (owner !== "all" && puzzle.owner_id !== owner) return false;
-      if (libraryFilter === "drifting" && puzzle.drift_state !== "drifting") return false;
-      if (libraryFilter === "retired" && puzzle.drift_state !== "retired") return false;
-      if (keyword && !`${puzzle.name} ${puzzle.brand}`.toLowerCase().includes(keyword)) return false;
+
+      if (
+        libraryFilter === "drifting" &&
+        puzzle.drift_state !== "drifting"
+      ) return false;
+
+      if (
+        libraryFilter === "retired" &&
+        puzzle.drift_state !== "retired"
+      ) return false;
+
+      if (
+        libraryFilter === "no_queue" &&
+        !(
+          puzzle.drift_state === "drifting" &&
+          puzzle.current_holder_id === puzzle.owner_id &&
+          puzzle.waiting_count === 0
+        )
+      ) return false;
+
+      if (
+        libraryFilter === "next_you" &&
+        !(
+          puzzle.drift_state === "drifting" &&
+          puzzle.current_holder_id !== puzzle.owner_id &&
+          puzzle.waiting_count === 0
+        )
+      ) return false;
+
+      if (
+        keyword &&
+        !`${puzzle.name} ${puzzle.brand}`
+          .toLowerCase()
+          .includes(keyword)
+      ) return false;
       return true;
     });
   }, [snapshot, search, brand, owner, libraryFilter]);
@@ -336,6 +386,8 @@ export default function Home() {
                 <option value="all">全部状态</option>
                 <option value="drifting">正在漂</option>
                 <option value="retired">退役</option>
+                <option value="no_queue">暂无排队</option>
+                <option value="next_you">下一棒就是你！</option>
               </select>
               <select value={brand} onChange={(event) => setBrand(event.target.value)}>
                 <option value="all">全部品牌</option>
@@ -365,13 +417,65 @@ export default function Home() {
             <div className="mySection"><button className="secondaryButton" type="button" onClick={() => setShowProfile(true)}>设置我的资料</button></div>
 
             <div className="mySection">
-              <div className="subHeading"><h3>我的拼图</h3><span>{myOwned.length}</span></div>
-              {myOwned.length > 0 ? <div className="puzzleGrid compactGrid">{myOwned.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />)}</div> : <div className="emptyPanel smallEmpty">你还没有发布拼图。</div>}
+              <div className="subHeading">
+                <h3>我的拼图</h3>
+                <span>{myOwned.length}</span>
+                <button
+                  type="button"
+                  className="collapseButton"
+                  onClick={() => setOwnedOpen((value) => !value)}
+                >
+                  {ownedOpen ? "收起" : "展开"}
+                </button>
+              </div>
+
+              {ownedOpen && (
+                myOwned.length > 0
+                  ? <div className="puzzleGrid compactGrid">
+                      {myOwned.map((p) => (
+                        <PuzzleCard
+                          key={p.id}
+                          puzzle={p}
+                          onOpen={setSelectedPuzzleId}
+                          onOpenUser={setSelectedUserId}
+                        />
+                      ))}
+                    </div>
+                  : <div className="emptyPanel smallEmpty">
+                      你还没有发布拼图。
+                    </div>
+              )}
             </div>
 
             <div className="mySection">
-              <div className="subHeading"><h3>我正在持有</h3><span>{myHolding.length}</span></div>
-              {myHolding.length > 0 ? <div className="puzzleGrid compactGrid">{myHolding.map((p) => <PuzzleCard key={p.id} puzzle={p} onOpen={setSelectedPuzzleId} onOpenUser={setSelectedUserId} />)}</div> : <div className="emptyPanel smallEmpty">目前没有别人的拼图在你手里。</div>}
+              <div className="subHeading">
+                <h3>我正在持有</h3>
+                <span>{myHolding.length}</span>
+                <button
+                  type="button"
+                  className="collapseButton"
+                  onClick={() => setHoldingOpen((value) => !value)}
+                >
+                  {holdingOpen ? "收起" : "展开"}
+                </button>
+              </div>
+
+              {holdingOpen && (
+                myHolding.length > 0
+                  ? <div className="puzzleGrid compactGrid">
+                      {myHolding.map((p) => (
+                        <PuzzleCard
+                          key={p.id}
+                          puzzle={p}
+                          onOpen={setSelectedPuzzleId}
+                          onOpenUser={setSelectedUserId}
+                        />
+                      ))}
+                    </div>
+                  : <div className="emptyPanel smallEmpty">
+                      目前没有别人的拼图在你手里。
+                    </div>
+              )}
             </div>
 
             <div className="mySection">
@@ -388,6 +492,7 @@ export default function Home() {
         <NewPuzzleModal
           onClose={() => setShowNewPuzzle(false)}
           onCreated={mutationCompleted}
+          brands={brands}
         />
       )}
 
@@ -398,6 +503,7 @@ export default function Home() {
           onClose={() => setSelectedPuzzleId(null)}
           onChanged={mutationCompleted}
           onOpenUser={setSelectedUserId}
+          brands={brands}
         />
       )}
       {selectedUserId && (

@@ -537,6 +537,7 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
           state.puzzle_handoffs = state.puzzle_handoffs.filter((row) => row.puzzle_id !== args.p_puzzle_id);
           state.puzzle_journey = state.puzzle_journey.filter((row) => row.puzzle_id !== args.p_puzzle_id);
           state.puzzle_activity = state.puzzle_activity.filter((row) => row.puzzle_id !== args.p_puzzle_id);
+          state.puzzle_comments = state.puzzle_comments.filter((row) => row.puzzle_id !== args.p_puzzle_id);
           state.puzzles = state.puzzles.filter((row) => row.id !== args.p_puzzle_id);
           return true;
         }

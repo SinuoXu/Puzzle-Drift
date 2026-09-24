@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { isUploadedImageUrl } from "@/lib/image-url";
+import { canonicalizeKnownBrand } from "@/lib/brands";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
     if (brandInput === null) return NextResponse.json({ error: "品牌最多 80 字。" }, { status: 400 });
     if (descriptionInput === null) return NextResponse.json({ error: "介绍最多 1000 字。" }, { status: 400 });
-    const brand = brandInput ?? "";
+    const brand = canonicalizeKnownBrand(brandInput ?? "");
     const description = descriptionInput ?? "";
     if (!coverUrl || !isUploadedImageUrl(coverUrl, "cover", user.id)) {
       return NextResponse.json({ error: "请先上传封面图。" }, { status: 400 });

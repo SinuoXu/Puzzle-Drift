@@ -11,6 +11,7 @@ export type EdgeState = {
   puzzle_activity: Record<string, any>[];
   puzzle_tasks: Record<string, any>[];
   puzzle_handoffs: Record<string, any>[];
+  puzzle_comments: Record<string, any>[];
   counters: { puzzle_activity: number };
   metadata?: Record<string, any>;
 };
@@ -39,6 +40,7 @@ function emptyState(): EdgeState {
     puzzle_activity: [],
     puzzle_tasks: [],
     puzzle_handoffs: [],
+    puzzle_comments: [],
     counters: { puzzle_activity: 1 },
     metadata: { registration_open: true },
   };
@@ -55,6 +57,7 @@ function normalizeState(input: any): EdgeState {
     "puzzle_activity",
     "puzzle_tasks",
     "puzzle_handoffs",
+    "puzzle_comments",
   ] as const) {
     if (!Array.isArray(state[key])) state[key] = [] as never;
   }
@@ -139,6 +142,24 @@ export async function mutateState<T>(fn: (state: EdgeState) => T | Promise<T>): 
   } finally {
     await openDataStore().delete(lockKey).catch(() => undefined);
   }
+}
+
+export async function createStateBackup(label: string): Promise<string> {
+  const state = await readState();
+
+  const safeLabel = label
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .slice(0, 80);
+
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-");
+
+  const key = `backups/${stamp}-${safeLabel || "backup"}.json`;
+
+  await openDataStore().setJSON(key, state);
+
+  return key;
 }
 
 export async function isRegistrationOpen(): Promise<boolean> {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { canonicalizeKnownBrand } from "@/lib/brands";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,6 +70,7 @@ export async function GET() {
 
       return {
         ...puzzle,
+        brand: canonicalizeKnownBrand(puzzle.brand ?? ""),
         owner_name: owner?.username ?? "未知用户",
         owner_avatar_url: owner?.avatar_url ?? null,
         current_holder_name: holder?.username ?? "未知用户",

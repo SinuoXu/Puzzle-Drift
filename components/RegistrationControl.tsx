@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BrandMaintenance } from "@/components/BrandMaintenance";
 
 export function RegistrationControl() {
   const [open, setOpen] = useState<boolean | null>(null);
@@ -85,6 +86,10 @@ export function RegistrationControl() {
       </button>
 
       {error && <p>{error}</p>}
+
+      <div className="adminMiniDivider" />
+
+      <BrandMaintenance />
     </section>
   );
 }

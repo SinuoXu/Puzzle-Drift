@@ -709,3 +709,161 @@ textarea { resize: vertical; }
   aspect-ratio: auto;
   object-fit: contain;
 }
+
+
+/* ==========================================================
+   Task title sizing
+   ========================================================== */
+
+.taskList .sidebarCard h3 {
+  font-size: 17px;
+  line-height: 1.4;
+  letter-spacing: -0.2px;
+}
+
+
+/* ==========================================================
+   Personal center collapsible sections
+   ========================================================== */
+
+.collapseButton {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  padding: 4px 7px;
+}
+
+.collapseButton:hover {
+  color: var(--text);
+}
+
+
+/* ==========================================================
+   Searchable brand input
+   ========================================================== */
+
+.brandInputWrap {
+  position: relative;
+  width: 100%;
+}
+
+.brandSuggestions,
+.brandNoMatch {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 250;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.12);
+  overflow: hidden;
+}
+
+.brandSuggestions {
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.brandSuggestions button {
+  width: 100%;
+  display: block;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.brandSuggestions button:hover {
+  background: var(--surface-2);
+}
+
+.brandNoMatch {
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminMiniDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+
+/* ==========================================================
+   Puzzle comments
+   ========================================================== */
+
+.commentsSection {
+  padding-bottom: 8px;
+}
+
+.commentButton {
+  padding: 7px 12px;
+  font-size: 11px;
+}
+
+.commentForm {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.commentForm textarea {
+  min-height: 52px;
+}
+
+.commentForm .primaryButton {
+  height: 42px;
+}
+
+.commentList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.commentRow {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(229,225,216,.65);
+}
+
+.commentRow strong {
+  flex: 0 0 auto;
+  font-size: 10px;
+}
+
+.commentRow span {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.commentEmpty {
+  color: var(--muted);
+  font-size: 10px;
+  margin: 0;
+}
+
+@media (max-width: 620px) {
+  .commentForm {
+    grid-template-columns: 1fr;
+  }
+
+  .commentForm .primaryButton {
+    width: 100%;
+  }
+}

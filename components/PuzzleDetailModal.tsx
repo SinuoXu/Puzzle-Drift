@@ -3,6 +3,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { ImageLightbox } from "@/components/ImageLightbox";
+import { BrandInput } from "@/components/BrandInput";
+import {
+  canonicalizeKnownBrand,
+  isKnownBrand,
+} from "@/lib/brands";
 import { uploadImage } from "@/lib/client-image";
 import type { Puzzle, User } from "@/lib/types";
 
@@ -25,12 +30,14 @@ export function PuzzleDetailModal({
   onClose,
   onChanged,
   onOpenUser,
+  brands,
 }: {
   puzzle: Puzzle;
   currentUser: User;
   onClose: () => void;
   onChanged: () => Promise<void>;
   onOpenUser: (id: string) => void;
+  brands: string[];
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -43,6 +50,17 @@ export function PuzzleDetailModal({
   const [hasSheet, setHasSheet] = useState(puzzle.has_sheet);
   const [coverPreview, setCoverPreview] = useState(false);
   const [availability, setAvailability] = useState(puzzle.availability);
+
+  const [comments, setComments] = useState<{
+    id: string;
+    user_id: string;
+    username: string;
+    content: string;
+    created_at: string;
+  }[]>([]);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
 
   const [retentionMode, setRetentionMode] = useState<"received" | "shipped" | null>(null);
   const [retentionDate, setRetentionDate] = useState(todayString());
@@ -60,6 +78,37 @@ export function PuzzleDetailModal({
   useEffect(() => {
     void fetch(`/api/puzzles/${puzzle.id}/history`, { cache: "no-store" }).then((r) => r.json())
       .then((data) => { setHistory(Object.fromEntries((data.history ?? []).map((row: { id: string }) => [row.id, row]))); setHandoffs(data.handoffs ?? []); });
+  }, [puzzle.id, puzzle.updated_at]);
+
+  useEffect(() => {
+    let active = true;
+
+    void fetch(
+      `/api/puzzles/${puzzle.id}/comments`,
+      { cache: "no-store" },
+    )
+      .then(async (response) => {
+        const data = await response
+          .json()
+          .catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ?? "读取留言失败。",
+          );
+        }
+
+        if (active) {
+          setComments(data.comments ?? []);
+        }
+      })
+      .catch(() => {
+        // Comments are secondary content.
+      });
+
+    return () => {
+      active = false;
+    };
   }, [puzzle.id, puzzle.updated_at]);
 
   useEffect(() => {
@@ -145,13 +194,30 @@ export function PuzzleDetailModal({
 
   async function saveEdit(event: FormEvent) {
     event.preventDefault();
+
+    const finalBrand =
+      canonicalizeKnownBrand(brand);
+
+    if (
+      finalBrand &&
+      !isKnownBrand(finalBrand, brands)
+    ) {
+      const confirmed = window.confirm(
+        `目前还没有品牌「${finalBrand}」。
+
+确定要作为一个新品牌保存吗？`,
+      );
+
+      if (!confirmed) return;
+    }
+
     try {
       await call(`/api/puzzles/${puzzle.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          brand,
+          brand: finalBrand,
           description,
           piece_count: Number(pieceCount),
           has_box: hasBox,
@@ -249,6 +315,58 @@ export function PuzzleDetailModal({
       await onChanged();
     } catch (error) { setError(error instanceof Error ? error.message : "填写邮费失败。"); }
     finally { setBusy(false); }
+  }
+
+  async function submitComment(event: FormEvent) {
+    event.preventDefault();
+
+    const content = commentText.trim();
+
+    if (!content || commentBusy) return;
+
+    setCommentBusy(true);
+    setError("");
+
+    try {
+      const response = await fetch(
+        `/api/puzzles/${puzzle.id}/comments`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ content }),
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ?? "留言失败。",
+        );
+      }
+
+      setComments((old) => [
+        ...old,
+        data.comment,
+      ]);
+
+      setCommentText("");
+      setCommentOpen(false);
+
+      await onChanged();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "留言失败。",
+      );
+    } finally {
+      setCommentBusy(false);
+    }
   }
 
   return (
@@ -423,7 +541,11 @@ export function PuzzleDetailModal({
                 </label>
                 <label>
                   <span>品牌</span>
-                  <input value={brand} maxLength={80} onChange={(event) => setBrand(event.target.value)} />
+                  <BrandInput
+                    value={brand}
+                    onChange={setBrand}
+                    brands={brands}
+                  />
                 </label>
 
                 <label>
@@ -484,6 +606,75 @@ export function PuzzleDetailModal({
             )}
           </section>
         )}
+
+        <section className="detailSection commentsSection">
+          <div className="sectionHeading">
+            <div>
+              <p className="eyebrow">Comments</p>
+              <h3>留言</h3>
+            </div>
+
+            <button
+              type="button"
+              className="secondaryButton commentButton"
+              onClick={() =>
+                setCommentOpen((value) => !value)
+              }
+            >
+              {commentOpen ? "取消" : "留言"}
+            </button>
+          </div>
+
+          {commentOpen && (
+            <form
+              className="commentForm"
+              onSubmit={submitComment}
+            >
+              <textarea
+                rows={2}
+                maxLength={300}
+                value={commentText}
+                placeholder="写一句留言…"
+                onChange={(event) =>
+                  setCommentText(event.target.value)
+                }
+              />
+
+              <button
+                type="submit"
+                className="primaryButton"
+                disabled={
+                  commentBusy ||
+                  !commentText.trim()
+                }
+              >
+                {commentBusy
+                  ? "发送中…"
+                  : "发送"}
+              </button>
+            </form>
+          )}
+
+          {comments.length > 0 ? (
+            <div className="commentList">
+              {comments.map((comment) => (
+                <div
+                  className="commentRow"
+                  key={comment.id}
+                >
+                  <strong>
+                    {comment.username}:
+                  </strong>
+                  <span>{comment.content}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="commentEmpty">
+              还没有留言。
+            </p>
+          )}
+        </section>
       </div>
 
       {coverPreview && (

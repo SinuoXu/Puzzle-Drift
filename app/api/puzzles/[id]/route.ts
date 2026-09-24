@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReadyUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { canonicalizeKnownBrand } from "@/lib/brands";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if ("brand" in input) {
       const brand = cleanText(input.brand, 80);
       if (brand === null) return NextResponse.json({ error: "品牌最多 80 字。" }, { status: 400 });
-      update.brand = brand;
+      update.brand = canonicalizeKnownBrand(brand);
     }
 
     if ("description" in input) {
