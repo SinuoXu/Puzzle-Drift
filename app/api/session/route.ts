@@ -194,19 +194,176 @@ export async function DELETE() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body.pin !== "string" || !/^\d{6}$/.test(body.pin)) {
-    return NextResponse.json({ error: "请输入 6 位数字 PIN。" }, { status: 400 });
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "未登录。" },
+        { status: 401 },
+      );
+    }
+
+    const body = await request
+      .json()
+      .catch(() => null);
+
+    const currentPin =
+      typeof body?.current_pin === "string"
+        ? body.current_pin
+        : "";
+
+    const newPin =
+      typeof body?.new_pin === "string"
+        ? body.new_pin
+        : "";
+
+    if (!/^\d{6}$/.test(newPin)) {
+      return NextResponse.json(
+        { error: "新 PIN 必须是 6 位数字。" },
+        { status: 400 },
+      );
+    }
+
+    const db = getSupabaseAdmin();
+
+    const {
+      data: existing,
+      error: readError,
+    } = await db
+      .from("app_users")
+      .select(
+        "pin_hash, pin_failed_count, pin_locked_until",
+      )
+      .eq("id", user.id)
+      .single();
+
+    if (readError || !existing) {
+      return NextResponse.json(
+        { error: "读取账号失败。" },
+        { status: 500 },
+      );
+    }
+
+    if (
+      existing.pin_locked_until &&
+      new Date(
+        existing.pin_locked_until,
+      ).getTime() > Date.now()
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "PIN 尝试过多，请 15 分钟后再试。",
+        },
+        { status: 429 },
+      );
+    }
+
+    /*
+     * Normal account:
+     * current PIN must be verified first.
+     *
+     * Very old accounts without a PIN can still set one
+     * while already authenticated on their original device.
+     */
+    if (existing.pin_hash) {
+      if (!/^\d{6}$/.test(currentPin)) {
+        return NextResponse.json(
+          { error: "请输入当前 6 位 PIN。" },
+          { status: 400 },
+        );
+      }
+
+      const correct = await compare(
+        currentPin,
+        existing.pin_hash,
+      );
+
+      if (!correct) {
+        const { error: failedError } =
+          await db.rpc(
+            "v03_pin_failed",
+            {
+              p_user_id: user.id,
+            },
+          );
+
+        if (failedError) {
+          throw new Error(
+            failedError.message,
+          );
+        }
+
+        return NextResponse.json(
+          { error: "当前 PIN 不正确。" },
+          { status: 401 },
+        );
+      }
+
+      if (currentPin === newPin) {
+        return NextResponse.json(
+          {
+            error:
+              "新 PIN 不能和当前 PIN 相同。",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    /*
+     * v03_reset_pin:
+     * - replaces the bcrypt hash
+     * - clears failed attempts
+     * - increments session_version
+     *
+     * That invalidates all previous sessions.
+     */
+    const {
+      data: reset,
+      error: resetError,
+    } = await db.rpc(
+      "v03_reset_pin",
+      {
+        p_user_id: user.id,
+        p_hash: await hash(newPin, 12),
+      },
+    );
+
+    if (resetError || !reset) {
+      return NextResponse.json(
+        { error: "修改 PIN 失败。" },
+        { status: 500 },
+      );
+    }
+
+    /*
+     * session_version just changed, so create a fresh
+     * session for this device. Other devices stay invalid.
+     */
+    const {
+      token,
+      expiresAt,
+    } = await createSession(user.id);
+
+    await setSessionCookie(
+      token,
+      expiresAt,
+    );
+
+    return NextResponse.json({
+      ok: true,
+    });
+  } catch (error) {
+    console.error(
+      "PATCH /api/session failed",
+      error,
+    );
+
+    return NextResponse.json(
+      { error: "修改 PIN 失败，请稍后重试。" },
+      { status: 500 },
+    );
   }
-  const db = getSupabaseAdmin();
-  const { data: existing, error: readError } = await db.from("app_users").select("pin_hash").eq("id", user.id).single();
-  if (readError) return NextResponse.json({ error: "读取账号失败。" }, { status: 500 });
-  if (existing.pin_hash) return NextResponse.json({ error: "PIN 已设置。如需重置，请联系管理员。" }, { status: 409 });
-  const { data, error } = await db.rpc("v03_claim_pin", { p_user_id: user.id, p_hash: await hash(body.pin, 12) });
-  if (error || !data) return NextResponse.json({ error: "设置 PIN 失败。" }, { status: 409 });
-  const { token, expiresAt } = await createSession(user.id);
-  await setSessionCookie(token, expiresAt);
-  return NextResponse.json({ ok: true });
 }

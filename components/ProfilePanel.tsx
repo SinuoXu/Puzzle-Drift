@@ -11,7 +11,9 @@ export function ProfilePanel({ user, onChanged }: { user: User; onChanged: () =>
   const [qr, setQr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [pin, setPin] = useState("");
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [resetUsername, setResetUsername] = useState("");
   const [resetResult, setResetResult] = useState("");
   const [registrationOpen, setRegistrationOpenValue] = useState<boolean | null>(null);
@@ -71,15 +73,73 @@ export function ProfilePanel({ user, onChanged }: { user: User; onChanged: () =>
     }
   }
 
-  async function savePin() {
-    const response = await fetch("/api/session", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin }),
-    });
-    const data = await response.json().catch(() => ({}));
-    setMessage(response.ok ? "PIN 已设置" : data.error ?? "设置 PIN 失败。");
-    if (response.ok) setPin("");
+  async function changePin() {
+    if (
+      newPin.length !== 6 ||
+      confirmPin.length !== 6
+    ) {
+      setMessage("新 PIN 必须是 6 位数字。");
+      return;
+    }
+
+    if (newPin !== confirmPin) {
+      setMessage("两次输入的新 PIN 不一致。");
+      return;
+    }
+
+    if (
+      currentPin.length !== 0 &&
+      currentPin.length !== 6
+    ) {
+      setMessage("当前 PIN 必须是 6 位数字。");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(
+        "/api/session",
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            current_pin: currentPin,
+            new_pin: newPin,
+          }),
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ?? "修改 PIN 失败。",
+        );
+      }
+
+      setCurrentPin("");
+      setNewPin("");
+      setConfirmPin("");
+
+      setMessage(
+        "PIN 已修改。其他设备上的旧登录状态已失效。",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "修改 PIN 失败。",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function resetPin() {
@@ -168,20 +228,96 @@ export function ProfilePanel({ user, onChanged }: { user: User; onChanged: () =>
 
     {qr && <img src={qr} alt="我的收款码" style={{ width: 120, maxWidth: "100%" }} />}
 
-    <label>
-      旧账号设置 6 位 PIN
-      <input
-        type="password"
-        inputMode="numeric"
-        maxLength={6}
-        value={pin}
-        onChange={(e) => setPin(e.target.value)}
-      />
-    </label>
+    <section className="pinChangeBlock">
+      <h4>修改 PIN</h4>
 
-    <button className="secondaryButton" disabled={pin.length !== 6} onClick={() => void savePin()}>
-      设置 PIN
-    </button>
+      <p>
+        记得当前 PIN 时可以自行修改。
+        如果已经忘记，请联系管理员生成临时 PIN。
+      </p>
+
+      <label>
+        当前 PIN
+        <input
+          type="password"
+          inputMode="numeric"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          autoComplete="current-password"
+          value={currentPin}
+          onChange={(event) =>
+            setCurrentPin(
+              event.target.value.replace(
+                /\D/g,
+                "",
+              ),
+            )
+          }
+          placeholder="6 位数字"
+        />
+      </label>
+
+      <label>
+        新 PIN
+        <input
+          type="password"
+          inputMode="numeric"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          autoComplete="new-password"
+          value={newPin}
+          onChange={(event) =>
+            setNewPin(
+              event.target.value.replace(
+                /\D/g,
+                "",
+              ),
+            )
+          }
+          placeholder="新的 6 位数字"
+        />
+      </label>
+
+      <label>
+        再输入一次新 PIN
+        <input
+          type="password"
+          inputMode="numeric"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          autoComplete="new-password"
+          value={confirmPin}
+          onChange={(event) =>
+            setConfirmPin(
+              event.target.value.replace(
+                /\D/g,
+                "",
+              ),
+            )
+          }
+          placeholder="再次输入新的 PIN"
+        />
+      </label>
+
+      <button
+        className="secondaryButton"
+        disabled={
+          busy ||
+          newPin.length !== 6 ||
+          confirmPin.length !== 6 ||
+          newPin !== confirmPin ||
+          (
+            currentPin.length !== 0 &&
+            currentPin.length !== 6
+          )
+        }
+        onClick={() => void changePin()}
+      >
+        {busy
+          ? "正在修改…"
+          : "修改 PIN"}
+      </button>
+    </section>
 
     {user.is_admin && (
       <section className="adminBlock">
