@@ -21,6 +21,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     p_receipt: typeof input.receipt_url === "string" ? input.receipt_url : null,
     p_return: input.return_home === true,
   });
-  if (error) return NextResponse.json({ error: "填写邮费失败，请检查当前流转状态。" }, { status: 400 });
+  if (error) {
+    if (error.message.includes("Use merged shipment")) {
+      return NextResponse.json(
+        { error: "这张拼图已经加入合并发货，请到“我的待办”里的合并发货中填写总邮费。" },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "填写邮费失败，请检查当前流转状态。" },
+      { status: 400 }
+    );
+  }
   return NextResponse.json({ ok: true });
 }

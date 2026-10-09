@@ -174,7 +174,15 @@ export function PuzzleDetailModal({
     !puzzle.journey.some((row) => row.user_id === currentUser.id && ["waiting", "current"].includes(row.status));
 
   const canReceive = Boolean(myCurrent && !myCurrent.is_owner_start && !myCurrent.received_on);
-  const canShip = Boolean(myCurrent && !myCurrent.is_owner_start && nextWaiting && myCurrent.received_on && !myCurrent.shipped_on);
+  const canShip = Boolean(
+    myCurrent &&
+    nextWaiting &&
+    !myCurrent.shipped_on &&
+    (
+      myCurrent.is_owner_start ||
+      myCurrent.received_on
+    )
+  );
   const canReturn = Boolean(myCurrent && !myCurrent.is_owner_start && myCurrent.received_on && !nextWaiting && puzzle.availability !== "retired");
 
   const summary = useMemo(() => {
@@ -676,7 +684,7 @@ export function PuzzleDetailModal({
               {canReturn && <button type="button" className="secondaryButton" onClick={() => { setReturnHome(true); setFeeOpen(true); }}>寄回图主并填写回家邮费</button>}
               {canReturn && <button type="button" className="secondaryButton" onClick={() => { setReturnHome(true); setRetentionMode("shipped"); }}>上传寄回留存</button>}
               {canReturn && <button type="button" className="secondaryButton" disabled={busy} onClick={() => void handoff(true)}>面交还给图主</button>}
-              {(canShip || canReturn) && <span className="actionHint">先填写邮费，再上传发货留存。</span>}
+              {(canShip || canReturn) && <span className="actionHint">邮费和发货留存可以按任意顺序完成。</span>}
             </div>
           </div>
         </div>

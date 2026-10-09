@@ -1184,3 +1184,132 @@ textarea { resize: vertical; }
 .pinChangeBlock input {
   font-size: 13px;
 }
+
+
+/* ==========================================================
+   Combined shipping
+   ========================================================== */
+
+.mergeShippingButton {
+  border: 1px solid #c8d9cc;
+  background: var(--green-soft);
+  color: var(--green);
+  border-radius: 12px;
+  padding: 10px 13px;
+  font-weight: 800;
+}
+
+.mergeShippingButton:hover {
+  background: #dfefe4;
+}
+
+.mergedTaskCard {
+  border-color: #c9dccf;
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f7fbf8 100%
+    );
+}
+
+.mergedPuzzleNames {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.mergedTaskStatus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0;
+}
+
+.mergedTaskStatus span {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.mergedTaskStatus span.done {
+  background: var(--green-soft);
+  border-color: #cae0d0;
+  color: var(--green);
+}
+
+.mergeShipmentModal {
+  padding: 28px;
+}
+
+.mergePuzzleChoices {
+  display: grid;
+  gap: 7px;
+  margin: 16px 0;
+}
+
+.mergePuzzleChoice {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 9px !important;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.mergePuzzleChoice input {
+  width: auto;
+  margin: 0;
+}
+
+.mergeOrderHint {
+  margin: 12px 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.mergedShippingForms {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.mergedShippingStep {
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 16px;
+  background: var(--surface-2);
+}
+
+.mergedShippingStep h3 {
+  margin: 0 0 13px;
+  font-size: 15px;
+}
+
+.taskActions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 700px) {
+  .mergeShipmentModal {
+    padding: 20px 16px;
+  }
+
+  .mergedShippingForms {
+    grid-template-columns: 1fr;
+  }
+}

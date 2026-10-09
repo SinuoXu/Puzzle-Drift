@@ -189,11 +189,6 @@ function markShippedInternal(
   if (turn.shipped_on) throw new Error("Shipping record already exists");
   if (!turn.is_owner_start && !turn.received_on) throw new Error("Please add the receiving record before shipping");
   if (!turn.is_owner_start && (!Array.isArray(urls) || urls.length < 1 || urls.length > 12)) throw new Error("Invalid photos");
-  const feeDone = state.puzzle_tasks.some(
-    (task) => task.journey_id === turn.id && task.kind === "shipping_fee" && task.status === "done",
-  );
-  if (!feeDone) throw new Error("Fee first");
-
   const next = sortedWaiting(state, puzzleId, Number(turn.seq))[0];
   if (returnHome) {
     if (turn.is_owner_start || next) throw new Error("Return unavailable");
@@ -319,11 +314,20 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
           const holder = currentTurn(state, puzzle.id);
           if (holder && (holder.is_owner_start || holder.received_on)) {
             addTaskIfMissing(state, { puzzle_id: puzzle.id, journey_id: holder.id, user_id: holder.user_id, kind: "shipping_fee" });
-            if (!holder.is_owner_start) addTaskIfMissing(state, { puzzle_id: puzzle.id, journey_id: holder.id, user_id: holder.user_id, kind: "ship" });
+            addTaskIfMissing(state, { puzzle_id: puzzle.id, journey_id: holder.id, user_id: holder.user_id, kind: "ship" });
           }
           return journey.id;
         }
         case "v03_cancel_queue": {
+          if (state.shipment_groups.some(
+            (group) =>
+              Array.isArray(group.puzzle_ids) &&
+              group.puzzle_ids.includes(args.p_puzzle_id) &&
+              !group.shipping_done
+          )) {
+            throw new Error("Shipment merge active");
+          }
+
           const turn = state.puzzle_journey.find((row) => row.puzzle_id === args.p_puzzle_id && row.user_id === args.p_user_id && row.status === "waiting");
           if (!turn) return false;
           if (state.puzzle_tasks.some((task) => task.journey_id === turn.id && task.kind === "pay_shipping")) {
@@ -343,6 +347,15 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
           return true;
         }
         case "v03_move_queue": {
+          if (state.shipment_groups.some(
+            (group) =>
+              Array.isArray(group.puzzle_ids) &&
+              group.puzzle_ids.includes(args.p_puzzle_id) &&
+              !group.shipping_done
+          )) {
+            throw new Error("Shipment merge active");
+          }
+
           const direction = Number(args.p_direction);
           if (direction !== -1 && direction !== 1) throw new Error("Invalid direction");
           const mine = state.puzzle_journey.find((row) => row.puzzle_id === args.p_puzzle_id && row.user_id === args.p_user_id && row.status === "waiting");
@@ -388,6 +401,15 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
           return true;
         }
         case "v03_ship": {
+          const merged = state.shipment_groups.find(
+            (group) =>
+              group.sender_id === args.p_user_id &&
+              Array.isArray(group.puzzle_ids) &&
+              group.puzzle_ids.includes(args.p_puzzle_id) &&
+              !group.shipping_done
+          );
+          if (merged) throw new Error("Use merged shipment");
+
           return markShippedInternal(
             state,
             args.p_puzzle_id,
@@ -400,39 +422,110 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
         }
         case "v03_fee": {
           const amount = Number(args.p_amount_cents);
-          if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 10_000_000) throw new Error("Invalid amount");
-          const turn = currentTurn(state, args.p_puzzle_id, args.p_user_id);
-          if (!turn) throw new Error("Not holder");
-          const next = sortedWaiting(state, args.p_puzzle_id, Number(turn.seq))[0];
+          if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 10_000_000) {
+            throw new Error("Invalid amount");
+          }
+
+          const merged = state.shipment_groups.find(
+            (group) =>
+              group.sender_id === args.p_user_id &&
+              Array.isArray(group.puzzle_ids) &&
+              group.puzzle_ids.includes(args.p_puzzle_id) &&
+              !group.fee_done
+          );
+
+          if (merged) throw new Error("Use merged shipment");
+
+          const feeTask = state.puzzle_tasks.find(
+            (task) =>
+              task.puzzle_id === args.p_puzzle_id &&
+              task.user_id === args.p_user_id &&
+              task.kind === "shipping_fee" &&
+              task.status === "open"
+          );
+
+          if (!feeTask) throw new Error("Fee already submitted");
+
+          const turn = state.puzzle_journey.find(
+            (row) =>
+              row.id === feeTask.journey_id &&
+              row.user_id === args.p_user_id
+          );
+
+          if (!turn) throw new Error("Shipping turn not found");
+
+          const next = state.puzzle_journey
+            .filter(
+              (row) =>
+                row.puzzle_id === args.p_puzzle_id &&
+                row.status !== "cancelled" &&
+                Number(row.seq) > Number(turn.seq)
+            )
+            .sort((a, b) => Number(a.seq) - Number(b.seq))[0];
+
           const returnHome = args.p_return === true;
+
           if (returnHome) {
             if (turn.is_owner_start || next) throw new Error("Return unavailable");
           } else if (!next) {
             throw new Error("No next holder");
           }
-          const feeTask = state.puzzle_tasks.find((task) => task.journey_id === turn.id && task.kind === "shipping_fee" && task.status === "open");
-          if (!feeTask) throw new Error("Fee already submitted");
+
           feeTask.status = "done";
           feeTask.amount_cents = amount;
           feeTask.tracking_number = String(args.p_tracking ?? "").slice(0, 120);
           feeTask.receipt_url = args.p_receipt ?? null;
           feeTask.completed_at = isoNow();
 
+          /*
+           * If this is an older owner-start record without a ship task,
+           * create one so shipping can still be completed after fee-first.
+           */
+          if (!turn.shipped_on) {
+            addTaskIfMissing(state, {
+              puzzle_id: args.p_puzzle_id,
+              journey_id: turn.id,
+              user_id: args.p_user_id,
+              kind: "ship",
+            });
+          }
+
           if (returnHome) {
-            const participantIds = [...new Set(state.puzzle_journey.filter((row) => row.puzzle_id === args.p_puzzle_id && !row.is_owner_start && row.status !== "cancelled").map((row) => row.user_id))].sort();
+            const participantIds = [
+              ...new Set(
+                state.puzzle_journey
+                  .filter(
+                    (row) =>
+                      row.puzzle_id === args.p_puzzle_id &&
+                      !row.is_owner_start &&
+                      row.status !== "cancelled"
+                  )
+                  .map((row) => row.user_id)
+              ),
+            ].sort();
+
             if (!participantIds.length) throw new Error("No participants");
+
             const base = Math.floor(amount / participantIds.length);
             const extra = amount % participantIds.length;
+
             participantIds.forEach((participantId, index) => {
               if (participantId === args.p_user_id) return;
-              state.puzzle_tasks.push(applyDefaults("puzzle_tasks", {
-                puzzle_id: args.p_puzzle_id,
-                journey_id: turn.id,
-                user_id: participantId,
-                payee_id: args.p_user_id,
-                kind: "pay_return",
-                amount_cents: base + (index < extra ? 1 : 0),
-              }, state));
+
+              state.puzzle_tasks.push(
+                applyDefaults(
+                  "puzzle_tasks",
+                  {
+                    puzzle_id: args.p_puzzle_id,
+                    journey_id: turn.id,
+                    user_id: participantId,
+                    payee_id: args.p_user_id,
+                    kind: "pay_return",
+                    amount_cents: base + (index < extra ? 1 : 0),
+                  },
+                  state,
+                ),
+              );
             });
           } else {
             addTaskIfMissing(state, {
@@ -443,10 +536,8 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
               kind: "pay_shipping",
               amount_cents: amount,
             });
-            if (turn.is_owner_start) {
-              markShippedInternal(state, args.p_puzzle_id, args.p_user_id, new Date().toISOString().slice(0, 10), [], "", false);
-            }
           }
+
           return true;
         }
         case "v03_mark_paid": {
@@ -466,6 +557,15 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
           return true;
         }
         case "v03_handoff": {
+          if (state.shipment_groups.some(
+            (group) =>
+              Array.isArray(group.puzzle_ids) &&
+              group.puzzle_ids.includes(args.p_puzzle_id) &&
+              (!group.shipping_done || !group.fee_done)
+          )) {
+            throw new Error("Shipment merge active");
+          }
+
           const puzzle = puzzleById(state, args.p_puzzle_id);
           if (!puzzle || puzzle.availability === "retired") throw new Error("Handoff unavailable");
           const turn = currentTurn(state, args.p_puzzle_id, args.p_user_id);
@@ -534,6 +634,15 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
         case "v03_admin_delete_puzzle": {
           const actor = state.app_users.find((row) => row.id === args.p_admin_id);
           const puzzle = puzzleById(state, args.p_puzzle_id);
+
+          if (state.shipment_groups.some(
+            (group) =>
+              Array.isArray(group.puzzle_ids) &&
+              group.puzzle_ids.includes(args.p_puzzle_id) &&
+              (!group.shipping_done || !group.fee_done)
+          )) {
+            throw new Error("Cancel merged shipment first");
+          }
           if (!puzzle) throw new Error("Puzzle not found");
           if (!actor || (!actor.is_admin && puzzle.owner_id !== actor.id)) {
             throw new Error("Owner or admin required");

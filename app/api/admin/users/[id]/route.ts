@@ -229,6 +229,15 @@ export async function DELETE(
         row.user_id !== id,
     );
 
+    state.shipment_groups = state.shipment_groups.filter(
+      (group) =>
+        group.sender_id !== id &&
+        group.recipient_id !== id &&
+        !(group.puzzle_ids ?? []).some(
+          (puzzleId: string) => ownedPuzzleIds.has(puzzleId)
+        )
+    );
+
     state.puzzle_journey = state.puzzle_journey.filter(
       (row) =>
         !ownedPuzzleIds.has(row.puzzle_id) &&

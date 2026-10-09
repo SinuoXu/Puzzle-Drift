@@ -23,7 +23,7 @@ function friendlyRpcError(message: string): string {
   if (message.includes("before shipping")) return "请先提交收货留存，再提交发货留存。";
   if (message.includes("Nobody is waiting next")) return "目前没有下一棒，暂时不能发货。";
   if (message.includes("Shipping record already exists")) return "发货留存已经提交过了。";
-  if (message.includes("Fee first")) return "请先填写发货邮费，再提交发货留存。";
+  if (message.includes("Use merged shipment")) return "这张拼图已经加入合并发货，请到“我的待办”里的合并发货中提交共享留存。";
   if (message.includes("Receive first")) return "请先提交收货留存。";
   return "提交留存失败。";
 }
