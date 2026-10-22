@@ -16,6 +16,7 @@ export function ProfilePanel({ user, onChanged }: { user: User; onChanged: () =>
   const [confirmPin, setConfirmPin] = useState("");
   const [resetUsername, setResetUsername] = useState("");
   const [resetResult, setResetResult] = useState("");
+  const [chenFixResult, setChenFixResult] = useState("");
   const [registrationOpen, setRegistrationOpenValue] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -154,6 +155,62 @@ export function ProfilePanel({ user, onChanged }: { user: User; onChanged: () =>
         ? `临时 PIN：${data.pin}。请私下告知本人。`
         : data.error ?? "重置失败。",
     );
+  }
+
+  async function cancelChenMergedShipment() {
+    const confirmed = window.confirm(
+      "确定取消「陳」当前的合并发货？\n\n执行前会自动备份整个数据库，然后恢复各张拼图原来的独立发货待办。",
+    );
+
+    if (!confirmed) return;
+
+    setBusy(true);
+    setMessage("");
+    setChenFixResult("");
+
+    try {
+      const response = await fetch(
+        "/api/admin/cancel-chen-merged-shipment",
+        {
+          method: "POST",
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ?? "取消失败。",
+        );
+      }
+
+      const names =
+        Array.isArray(
+          data.puzzle_names,
+        )
+          ? data.puzzle_names.join(
+              "、",
+            )
+          : "";
+
+      setChenFixResult(
+        names
+          ? `已取消陳的合并发货：${names}。数据库已备份。`
+          : "已取消陳的合并发货，数据库已备份。",
+      );
+
+      await onChanged();
+    } catch (error) {
+      setChenFixResult(
+        error instanceof Error
+          ? error.message
+          : "取消失败。",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function toggleRegistration() {
@@ -353,6 +410,29 @@ export function ProfilePanel({ user, onChanged }: { user: User; onChanged: () =>
         </button>
 
         {resetResult && <p>{resetResult}</p>}
+
+        <h4>临时修复：陳的合并发货</h4>
+
+        <p>
+          仅当陳当前恰好有 1 组活动合并发货时执行。
+          操作前会自动完整备份数据库。
+        </p>
+
+        <button
+          className="secondaryButton"
+          disabled={busy}
+          onClick={() =>
+            void cancelChenMergedShipment()
+          }
+        >
+          {busy
+            ? "正在处理…"
+            : "取消陳的当前合并发货"}
+        </button>
+
+        {chenFixResult && (
+          <p>{chenFixResult}</p>
+        )}
       </section>
     )}
 
