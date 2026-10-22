@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getReadyUser } from "@/lib/session";
 import { isUploadedImageUrl } from "@/lib/image-url";
 import {
+  createStateBackup,
+  getImageStore,
+  imageKeyFromPublicUrl,
   isoNow,
   mutateState,
   nextActivityId,
@@ -54,39 +57,369 @@ export async function PATCH(
   }
 
   /*
-   * Cancel grouping before either half has been submitted.
+   * Cancel / rollback merged shipping.
+   *
+   * Safe cases:
+   * - nothing submitted yet
+   * - fee submitted, but recipient has not paid
+   * - shipping submitted, but recipient has not received
+   * - both partially progressed, while neither downstream action happened
+   */
+  /*
+   * Cancel merged shipping.
+   *
+   * Simple rule:
+   * always restore the selected puzzles to their
+   * pre-merged independent shipping state.
    */
   if (body.action === "cancel") {
     try {
-      await mutateState((state) => {
-        const groupIndex =
-          state.shipment_groups.findIndex(
-            (group) =>
-              group.id === id &&
-              group.sender_id === user.id,
-          );
-
-        if (groupIndex < 0) {
-          throw new Error("找不到这个合并发货。");
-        }
-
-        const group =
-          state.shipment_groups[groupIndex];
-
-        if (group.shipping_done || group.fee_done) {
-          throw new Error(
-            "已经提交过发货留存或邮费，不能取消合并。",
-          );
-        }
-
-        state.shipment_groups.splice(
-          groupIndex,
-          1,
+      const backupKey =
+        await createStateBackup(
+          `before-cancel-shipment-${id}`,
         );
-      });
 
-      return NextResponse.json({ ok: true });
+      const result =
+        await mutateState((state) => {
+          const groupIndex =
+            state.shipment_groups.findIndex(
+              (group) =>
+                group.id === id &&
+                group.sender_id === user.id,
+            );
+
+          /*
+           * Idempotent for weak-network retries.
+           */
+          if (groupIndex < 0) {
+            return {
+              already_cancelled: true,
+              image_urls: [] as string[],
+            };
+          }
+
+          const group =
+            state.shipment_groups[
+              groupIndex
+            ];
+
+          const imageUrls =
+            new Set<string>();
+
+          const addImage = (
+            value: unknown,
+          ) => {
+            if (
+              typeof value === "string" &&
+              value
+            ) {
+              imageUrls.add(value);
+            }
+          };
+
+          /*
+           * Shared images / receipt will no longer be used.
+           */
+          for (
+            const url of
+            group.shipping_photo_urls ??
+            []
+          ) {
+            addImage(url);
+          }
+
+          addImage(
+            group.receipt_url,
+          );
+
+          /*
+           * Remove the single merged payment task.
+           * Whether it was open or done does not matter:
+           * cancelling means the merged fee is discarded.
+           */
+          state.puzzle_tasks =
+            state.puzzle_tasks.filter(
+              (task) =>
+                !(
+                  task.kind ===
+                    "pay_shipping" &&
+                  task.shipment_group_id ===
+                    group.id
+                ),
+            );
+
+          for (
+            const item of
+            group.items ?? []
+          ) {
+            const puzzle =
+              state.puzzles.find(
+                (row) =>
+                  row.id ===
+                  item.puzzle_id,
+              );
+
+            const turn =
+              state.puzzle_journey.find(
+                (row) =>
+                  row.id ===
+                  item.turn_journey_id,
+              );
+
+            const recipientJourney =
+              state.puzzle_journey.find(
+                (row) =>
+                  row.id ===
+                  item.recipient_journey_id,
+              );
+
+            /*
+             * Restore original sender turn.
+             */
+            if (turn) {
+              for (
+                const url of
+                turn.shipping_photo_urls ??
+                []
+              ) {
+                addImage(url);
+              }
+
+              turn.status = "current";
+              turn.shipped_on = null;
+              turn.shipping_photo_url =
+                null;
+              turn.shipping_photo_urls =
+                [];
+              turn.shipping_note = "";
+            }
+
+            /*
+             * Put the next person back into waiting.
+             * We intentionally keep this simple and reset the
+             * journey to its pre-shipping state.
+             */
+            if (recipientJourney) {
+              recipientJourney.status =
+                "waiting";
+
+              recipientJourney.received_on =
+                null;
+              recipientJourney.received_photo_url =
+                null;
+              recipientJourney.received_photo_urls =
+                [];
+              recipientJourney.receiving_note =
+                "";
+
+              recipientJourney.shipped_on =
+                null;
+              recipientJourney.shipping_photo_url =
+                null;
+              recipientJourney.shipping_photo_urls =
+                [];
+              recipientJourney.shipping_note =
+                "";
+
+              /*
+               * These tasks only exist because the puzzle
+               * advanced to this recipient.
+               */
+              state.puzzle_tasks =
+                state.puzzle_tasks.filter(
+                  (task) =>
+                    !(
+                      task.journey_id ===
+                        recipientJourney.id &&
+                      [
+                        "receive",
+                        "ship",
+                        "shipping_fee",
+                      ].includes(
+                        task.kind,
+                      )
+                    ),
+                );
+            }
+
+            /*
+             * Puzzle returns to the cancelling sender.
+             */
+            if (puzzle) {
+              puzzle.current_holder_id =
+                user.id;
+              puzzle.in_transit = false;
+              puzzle.updated_at =
+                isoNow();
+            }
+
+            /*
+             * Restore sender's individual ship task.
+             */
+            if (turn) {
+              let shipTask =
+                state.puzzle_tasks.find(
+                  (task) =>
+                    task.puzzle_id ===
+                      item.puzzle_id &&
+                    task.journey_id ===
+                      turn.id &&
+                    task.user_id ===
+                      user.id &&
+                    task.kind ===
+                      "ship",
+                );
+
+              if (!shipTask) {
+                addTask(state, {
+                  puzzle_id:
+                    item.puzzle_id,
+                  journey_id:
+                    turn.id,
+                  user_id:
+                    user.id,
+                  kind: "ship",
+                });
+
+                shipTask =
+                  state.puzzle_tasks[
+                    state.puzzle_tasks.length -
+                      1
+                  ];
+              }
+
+              shipTask.status = "open";
+              shipTask.completed_at =
+                null;
+
+              delete shipTask
+                .shipment_group_id;
+
+              /*
+               * Restore sender's individual fee task.
+               */
+              let feeTask =
+                state.puzzle_tasks.find(
+                  (task) =>
+                    task.puzzle_id ===
+                      item.puzzle_id &&
+                    task.journey_id ===
+                      turn.id &&
+                    task.user_id ===
+                      user.id &&
+                    task.kind ===
+                      "shipping_fee",
+                );
+
+              if (!feeTask) {
+                addTask(state, {
+                  puzzle_id:
+                    item.puzzle_id,
+                  journey_id:
+                    turn.id,
+                  user_id:
+                    user.id,
+                  kind:
+                    "shipping_fee",
+                });
+
+                feeTask =
+                  state.puzzle_tasks[
+                    state.puzzle_tasks.length -
+                      1
+                  ];
+              }
+
+              addImage(
+                feeTask.receipt_url,
+              );
+
+              feeTask.status = "open";
+              feeTask.completed_at =
+                null;
+              feeTask.amount_cents =
+                null;
+              feeTask.tracking_number =
+                "";
+              feeTask.receipt_url =
+                null;
+
+              delete feeTask
+                .shipment_group_id;
+            }
+          }
+
+          /*
+           * Remove activity generated specifically by the
+           * merged shipping action.
+           */
+          state.puzzle_activity =
+            state.puzzle_activity.filter(
+              (activity) =>
+                !(
+                  activity.payload
+                    ?.shipment_group_id ===
+                  group.id
+                ),
+            );
+
+          /*
+           * The merge itself is now gone.
+           */
+          state.shipment_groups.splice(
+            groupIndex,
+            1,
+          );
+
+          return {
+            already_cancelled: false,
+            image_urls:
+              [...imageUrls],
+          };
+        });
+
+      /*
+       * Best-effort cleanup of the shared merged-shipment
+       * images and receipt.
+       */
+      const imageStore =
+        getImageStore();
+
+      const keys =
+        new Set(
+          result.image_urls
+            .map((url) =>
+              imageKeyFromPublicUrl(
+                url,
+              ),
+            )
+            .filter(
+              (
+                key,
+              ): key is string =>
+                Boolean(key),
+            ),
+        );
+
+      await Promise.allSettled(
+        [...keys].map((key) =>
+          imageStore.delete(key),
+        ),
+      );
+
+      return NextResponse.json({
+        ok: true,
+        restored: true,
+        already_cancelled:
+          result.already_cancelled,
+        backup_key: backupKey,
+      });
     } catch (error) {
+      console.error(
+        "Cancel merged shipment failed",
+        error,
+      );
+
       return NextResponse.json(
         {
           error:

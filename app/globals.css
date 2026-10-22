@@ -1313,3 +1313,14 @@ textarea { resize: vertical; }
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Reliable merged-shipment cancellation */
+.mergedCardActions {
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.mergedCardActions .secondaryButton {
+  color: var(--muted);
+}

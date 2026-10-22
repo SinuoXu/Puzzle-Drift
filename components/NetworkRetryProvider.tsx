@@ -46,6 +46,13 @@ function retryCount(path: string, method: string): number {
     /^\/api\/puzzles\/[^/]+\/likes$/.test(path)
   ) return 10;
 
+  // Merged shipping PATCH actions are implemented idempotently:
+  // shipping, fee and cancel can safely survive a lost response.
+  if (
+    method === "PATCH" &&
+    /^\/api\/shipping-groups\/[^/]+$/.test(path)
+  ) return 10;
+
   // Logging out is idempotent.
   if (method === "DELETE" && path === "/api/session") return 3;
 

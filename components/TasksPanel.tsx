@@ -401,15 +401,28 @@ export function TasksPanel({
     setReceiptFile(null);
   }
 
-  async function cancelMergedGroup() {
-    if (!activeGroup) return;
+  async function cancelMergedGroup(
+    group: MergedGroup,
+  ) {
+    if (busy) return;
+
+    const progressed =
+      group.shipping_done ||
+      group.fee_done;
+
+    const confirmed =
+      window.confirm(
+        "确定取消合并发货？\n\n这次合并的发货留存和邮费都会清空，所有拼图恢复成原来的独立发货待办。",
+      );
+
+    if (!confirmed) return;
 
     setBusy(true);
     setError("");
 
     try {
       const response = await fetch(
-        `/api/shipping-groups/${activeGroup.id}`,
+        `/api/shipping-groups/${group.id}`,
         {
           method: "PATCH",
           headers: {
@@ -434,13 +447,53 @@ export function TasksPanel({
         );
       }
 
-      setActiveGroup(null);
+      /*
+       * Update UI immediately instead of waiting for
+       * the task refresh round trip.
+       */
+      setMergedGroups((old) =>
+        old.filter(
+          (item) =>
+            item.id !== group.id,
+        ),
+      );
+
+      if (
+        activeGroup?.id ===
+        group.id
+      ) {
+        setActiveGroup(null);
+      }
+
+      /*
+       * Prevent stale localStorage from bringing the
+       * cancelled group back for a moment.
+       */
+      try {
+        window.localStorage.removeItem(
+          cacheKey(userId),
+        );
+      } catch {
+        // Ignore browser storage failures.
+      }
+
+      setLoading(true);
+
       await onChanged();
+
+      window.alert(
+        "已取消合并发货，正在恢复每张拼图的独立待办。",
+      );
     } catch (err) {
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "取消合并失败。",
+          : "取消合并失败。";
+
+      setError(message);
+
+      window.alert(
+        `取消合并失败：${message}`,
       );
     } finally {
       setBusy(false);
@@ -813,17 +866,34 @@ export function TasksPanel({
                 </span>
               </div>
 
-              <button
-                className="primaryButton"
-                type="button"
-                onClick={() =>
-                  openMergedGroup(
-                    group,
-                  )
-                }
-              >
-                处理合并发货
-              </button>
+              <div className="modalActions alignLeft mergedCardActions">
+                <button
+                  className="primaryButton"
+                  type="button"
+                  onClick={() =>
+                    openMergedGroup(
+                      group,
+                    )
+                  }
+                >
+                  处理合并发货
+                </button>
+
+                <button
+                  className="secondaryButton"
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void cancelMergedGroup(
+                      group,
+                    )
+                  }
+                >
+                  {busy
+                    ? "处理中…"
+                    : "取消合并"}
+                </button>
+              </div>
             </article>
           ),
         )}
@@ -1391,7 +1461,7 @@ export function TasksPanel({
                     className="secondaryButton"
                     disabled={busy}
                     onClick={() =>
-                      void cancelMergedGroup()
+                      void cancelMergedGroup(activeGroup)
                     }
                   >
                     取消合并
