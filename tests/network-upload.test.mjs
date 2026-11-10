@@ -89,6 +89,15 @@ test("caller cancellation is not retried and its abort listener is removed", asy
   assert.equal(adds, removes);
 });
 
+test("cancellation works in mobile webviews without AbortSignal.throwIfAborted", async () => {
+  const controller = new AbortController();
+  Object.defineProperty(controller.signal, "throwIfAborted", { value: undefined });
+  const wrapped = createRetryingFetch(async () => Response.json({ ok: true }), origin, noWait);
+  assert.equal((await wrapped("/api/tasks", { signal: controller.signal })).status, 200);
+  controller.abort();
+  await assert.rejects(wrapped("/api/tasks", { signal: controller.signal }), { name: "AbortError" });
+});
+
 test("the timeout remains active when headers arrive but the JSON body stalls", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let calls = 0;

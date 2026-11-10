@@ -66,7 +66,7 @@ export function createRetryingFetch(nativeFetch: typeof fetch, origin: string, p
 
     let lastError: unknown;
     for (let attempt = 1; attempt <= policy.attempts; attempt++) {
-      originalSignal?.throwIfAborted();
+      if (originalSignal?.aborted) throw originalSignal.reason ?? new DOMException("Request cancelled", "AbortError");
       const controller = new AbortController();
       const forwardAbort = () => controller.abort(originalSignal?.reason);
       originalSignal?.addEventListener("abort", forwardAbort, { once: true });
