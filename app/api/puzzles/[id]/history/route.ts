@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getSessionContext } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "未登录。" }, { status: 401 });
+  const { user, state } = await getSessionContext();
+  if (!user || !state) return NextResponse.json({ error: "未登录。" }, { status: 401 });
   const { id } = await context.params;
-  const db = getSupabaseAdmin();
+  const db = getSupabaseAdmin(state);
   const { data, error } = await db.from("puzzle_journey")
     .select("id, received_photo_urls, receiving_note, shipping_photo_urls, shipping_note")
     .eq("puzzle_id", id).order("seq");

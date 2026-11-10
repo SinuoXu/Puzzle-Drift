@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getReadyUser } from "@/lib/session";
+import { getReadyUser, getReadyContext } from "@/lib/session";
 import {
   isoNow,
   mutateState,
-  readState,
   uuid,
 } from "@/lib/edgeone-store";
 
@@ -17,9 +16,9 @@ export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const user = await getReadyUser();
+  const { user, state } = await getReadyContext();
 
-  if (!user) {
+  if (!user || !state) {
     return NextResponse.json(
       { error: "未登录。" },
       { status: 401 },
@@ -34,8 +33,6 @@ export async function GET(
       { status: 400 },
     );
   }
-
-  const state = await readState();
 
   if (!state.puzzles.some((row) => row.id === id)) {
     return NextResponse.json(

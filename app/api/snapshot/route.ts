@@ -1,22 +1,23 @@
-import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { createHash } from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionContext } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { canonicalizeKnownBrand } from "@/lib/brands";
-import { readState } from "@/lib/edgeone-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const started = performance.now();
   try {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
+    const { user: currentUser, state } = await getSessionContext();
+    if (!currentUser || !state) {
       return NextResponse.json({ error: "未登录。" }, { status: 401 });
     }
 
     if (currentUser.profile_required) return NextResponse.json({ error: "请先完成个人资料。", needs_profile: true, user: currentUser }, { status: 403 });
 
-    const db = getSupabaseAdmin();
+    const db = getSupabaseAdmin(state);
 
     const [usersResult, puzzlesResult, journeyResult, activityResult] = await Promise.all([
       db.from("app_users").select("id, username, avatar_url, is_admin"),
@@ -41,8 +42,6 @@ export async function GET() {
     if (puzzlesResult.error) throw new Error(puzzlesResult.error.message);
     if (journeyResult.error) throw new Error(journeyResult.error.message);
     if (activityResult.error) throw new Error(activityResult.error.message);
-
-    const state = await readState();
 
     const likedPuzzleIds = new Set(
       state.puzzle_likes
@@ -121,8 +120,7 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json(
-      {
+    const payload = {
         user: currentUser,
         members: users.map((member: any) => ({
           id: member.id,
@@ -132,9 +130,14 @@ export async function GET() {
         })),
         puzzles,
         activities,
-      },
-      { headers: { "Cache-Control": "no-store" } }
-    );
+      };
+    const etag = `"${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}"`;
+    const headers = {
+      "Cache-Control": "private, no-store", Vary: "Cookie", ETag: etag,
+      "Server-Timing": `snapshot;dur=${(performance.now() - started).toFixed(1)}`,
+    };
+    if (request.headers.get("if-none-match") === etag) return new NextResponse(null, { status: 304, headers });
+    return NextResponse.json(payload, { headers });
   } catch (error) {
     console.error("GET /api/snapshot failed", error);
     return NextResponse.json({ error: "读取数据失败。" }, { status: 500 });

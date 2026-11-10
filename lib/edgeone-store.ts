@@ -23,12 +23,17 @@ const LOCK_PREFIX = "locks/global/";
 const LOCK_STALE_MS = 30_000;
 const LOCK_WAIT_MS = 25_000;
 
+// Reuse SDK credential/connection caches, never application-state snapshots.
+// Creating a Store for every operation also creates a fresh STS credential manager.
+let dataStore: ReturnType<typeof getStore> | undefined;
+let imageStore: ReturnType<typeof getStore> | undefined;
+
 function openDataStore() {
-  return getStore("puzzle-drift-data");
+  return dataStore ??= getStore("puzzle-drift-data");
 }
 
 function openImageStore() {
-  return getStore("puzzle-drift-images");
+  return imageStore ??= getStore("puzzle-drift-images");
 }
 
 function emptyState(): EdgeState {

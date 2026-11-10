@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { readState, type EdgeState } from "@/lib/edgeone-store";
 
 const COOKIE_NAME = "pd_session";
 const SESSION_DURATION_MS = 365 * 24 * 60 * 60 * 1000;
@@ -50,45 +51,43 @@ export async function setSessionCookie(token: string, expiresAt: Date): Promise<
   });
 }
 
-export async function getCurrentUser(): Promise<AppUser | null> {
+// A read-only request authenticates and renders from the same strong-consistent
+// snapshot. Do not retain this state across requests or use it for writes.
+export async function getSessionContext(): Promise<{ user: AppUser | null; state: EdgeState | null }> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) return null;
+  if (!token) return { user: null, state: null };
 
-  const db = getSupabaseAdmin();
+  const state = await readState();
   const tokenHash = hashToken(token);
-
-  const { data: session, error: sessionError } = await db
-    .from("app_sessions")
-    .select("user_id, expires_at, session_version")
-    .eq("token_hash", tokenHash)
-    .maybeSingle();
-
-  if (sessionError) throw new Error(`Failed to read session: ${sessionError.message}`);
-  if (!session) return null;
-
-  if (new Date(session.expires_at).getTime() <= Date.now()) {
-    await db.from("app_sessions").delete().eq("token_hash", tokenHash);
-    return null;
-  }
-
-  const { data: user, error: userError } = await db
-    .from("app_users")
-    .select("id, username, avatar_url, is_admin, profile_required, session_version")
-    .eq("id", session.user_id)
-    .maybeSingle();
-
-  if (userError) throw new Error(`Failed to read user: ${userError.message}`);
-  if (!user) return null;
-  if (session.session_version !== user.session_version) return null;
+  const sessions = state.app_sessions.filter((row) => row.token_hash === tokenHash);
+  const session = sessions.length === 1 ? sessions[0] : null;
+  const expiresAt = new Date(session?.expires_at ?? "").getTime();
+  // Reject expiry immediately, without making a GET queue for a global write.
+  if (!session || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return { user: null, state: null };
+  const users = state.app_users.filter((row) => row.id === session.user_id);
+  const user = users.length === 1 ? users[0] : null;
+  if (!user || session.session_version !== user.session_version) return { user: null, state: null };
 
   return {
-    id: user.id,
-    username: user.username,
-    avatar_url: user.avatar_url ?? null,
-    is_admin: Boolean(user.is_admin),
-    profile_required: Boolean(user.profile_required),
+    state,
+    user: {
+      id: user.id,
+      username: user.username,
+      avatar_url: user.avatar_url ?? null,
+      is_admin: Boolean(user.is_admin),
+      profile_required: Boolean(user.profile_required),
+    },
   };
+}
+
+export async function getCurrentUser(): Promise<AppUser | null> {
+  return (await getSessionContext()).user;
+}
+
+export async function getReadyContext() {
+  const context = await getSessionContext();
+  return context.user?.profile_required ? { user: null, state: null } : context;
 }
 
 export async function destroyCurrentSession(): Promise<void> {

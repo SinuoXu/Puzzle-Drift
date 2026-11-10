@@ -380,7 +380,14 @@ async function runRpc(name: string, args: Record<string, any>): Promise<DbResult
           const turn = currentTurn(state, args.p_puzzle_id, args.p_user_id);
           if (!turn) throw new Error("You are not the current holder");
           if (turn.is_owner_start) throw new Error("The initial owner turn does not need a receiving record");
-          if (turn.received_on) throw new Error("Receiving record already exists");
+          if (turn.received_on) {
+            // Identical retries after a lost success response cannot duplicate
+            // activity/tasks or replace a different receiving record.
+            const savedUrls = Array.isArray(turn.received_photo_urls) ? turn.received_photo_urls : [turn.received_photo_url].filter(Boolean);
+            if (turn.received_on === args.p_date && JSON.stringify(savedUrls) === JSON.stringify(urls) &&
+                String(turn.receiving_note ?? "") === String(args.p_note ?? "").slice(0, 1000)) return true;
+            throw new Error("Receiving record already exists");
+          }
           const puzzle = puzzleById(state, args.p_puzzle_id);
           if (!puzzle) throw new Error("Puzzle not found");
           turn.received_on = args.p_date;
@@ -682,7 +689,7 @@ class QueryBuilder implements PromiseLike<DbResult> {
   private orderBy: { column: string; ascending: boolean } | null = null;
   private maxRows: number | null = null;
 
-  constructor(private table: TableName) {}
+  constructor(private table: TableName, private readSnapshot?: EdgeState) {}
 
   select(fields = "*") {
     this.fields = fields;
@@ -738,7 +745,7 @@ class QueryBuilder implements PromiseLike<DbResult> {
     try {
       let rows: Record<string, any>[] = [];
       if (this.mode === "select") {
-        const state = await readState();
+        const state = this.readSnapshot ?? await readState();
         rows = getRows(state, this.table).filter((row) => matches(row, this.filters)).map(clone);
       } else {
         rows = await mutateState((state) => {
@@ -830,8 +837,10 @@ class StorageBucket {
 }
 
 class EdgeOneCompatClient {
+  constructor(private readSnapshot?: EdgeState) {}
+
   from(table: string) {
-    return new QueryBuilder(table as TableName);
+    return new QueryBuilder(table as TableName, this.readSnapshot);
   }
   rpc(name: string, args: Record<string, any>) {
     return runRpc(name, args);
@@ -845,6 +854,6 @@ const client = new EdgeOneCompatClient();
 
 // Kept under the old function name so the existing API routes do not need to be
 // rewritten all at once. This client no longer connects to Supabase.
-export function getSupabaseAdmin(): any {
-  return client;
+export function getSupabaseAdmin(readSnapshot?: EdgeState): any {
+  return readSnapshot ? new EdgeOneCompatClient(readSnapshot) : client;
 }

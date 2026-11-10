@@ -217,6 +217,7 @@ export function TasksPanel({
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
 
     const cached =
       readCache(userId);
@@ -236,7 +237,7 @@ export function TasksPanel({
 
     void fetch(
       `/api/tasks?revision=${refreshKey}`,
-      { cache: "no-store" },
+      { cache: "no-store", signal: controller.signal },
     )
       .then(async (response) => {
         const data =
@@ -296,6 +297,7 @@ export function TasksPanel({
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [userId, refreshKey]);
 

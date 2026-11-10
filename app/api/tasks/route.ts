@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getReadyUser } from "@/lib/session";
+import { getReadyUser, getReadyContext } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { readState } from "@/lib/edgeone-store";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await getReadyUser();
+  const context = await getReadyContext();
 
-  if (!user) {
+  if (!context.user || !context.state) {
     return NextResponse.json(
       { error: "未登录。" },
       { status: 401 },
     );
   }
 
-  const state = await readState();
+  const { user, state } = context;
 
   const userMap = new Map(
     state.app_users.map((row) => [
@@ -362,7 +361,7 @@ export async function GET() {
     {
       headers: {
         "Cache-Control":
-          "private, max-age=15, stale-while-revalidate=30",
+          "no-store",
         Vary: "Cookie",
       },
     },

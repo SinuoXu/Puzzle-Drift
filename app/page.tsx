@@ -118,25 +118,44 @@ export default function Home() {
   const [globalError, setGlobalError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const snapshotRequestRef = useRef<Promise<void> | null>(null);
+  const snapshotEtagRef = useRef<string | null>(null);
 
   const loadSnapshot = useCallback(async (silent = false) => {
-    try {
-      const response = await fetch("/api/snapshot", { cache: "no-store" });
-      if (response.status === 401) {
-        setSnapshot(null);
-        setOnboardingUser(null);
-        return;
-      }
-
-      const data = await response.json().catch(() => ({}));
-      if (response.status === 403 && data.needs_profile) { setOnboardingUser(data.user as User); setSnapshot(null); return; }
-      if (!response.ok) throw new Error(data.error ?? "读取数据失败。");
-      setOnboardingUser(null);
-      setSnapshot(data as Snapshot);
-      if (!silent) setGlobalError("");
-    } catch (err) {
-      if (!silent) setGlobalError(err instanceof Error ? err.message : "读取数据失败。");
+    // A mutation refresh must run after any older poll, never share an older
+    // snapshot that might have started before the mutation was committed.
+    while (snapshotRequestRef.current) {
+      await snapshotRequestRef.current;
+      if (silent) return;
     }
+    const operation = (async () => {
+      try {
+        const response = await fetch("/api/snapshot", {
+          cache: "no-store",
+          headers: snapshotEtagRef.current ? { "If-None-Match": snapshotEtagRef.current } : {},
+        });
+        if (response.status === 304) { if (!silent) setGlobalError(""); return; }
+        if (response.status === 401) {
+          snapshotEtagRef.current = null;
+          setSnapshot(null);
+          setOnboardingUser(null);
+          return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 403 && data.needs_profile) { snapshotEtagRef.current = null; setOnboardingUser(data.user as User); setSnapshot(null); return; }
+        if (!response.ok) throw new Error(data.error ?? "读取数据失败。");
+        snapshotEtagRef.current = response.headers.get("etag");
+        setOnboardingUser(null);
+        setSnapshot(data as Snapshot);
+        if (!silent) setGlobalError("");
+      } catch (err) {
+        if (!silent) setGlobalError(err instanceof Error ? err.message : "读取数据失败。");
+      }
+    })();
+    snapshotRequestRef.current = operation;
+    try { await operation; }
+    finally { if (snapshotRequestRef.current === operation) snapshotRequestRef.current = null; }
   }, []);
 
   useEffect(() => {
@@ -175,12 +194,29 @@ export default function Home() {
     return;
   }, [Boolean(snapshot), loadSnapshot, refreshTasks]);
 
-  // Fallback consistency check. Realtime normally updates immediately; polling catches missed events.
+  // Poll only a visible, online page. Returning to the page refreshes immediately.
   useEffect(() => {
     if (!snapshot) return;
-    const timer = window.setInterval(() => void loadSnapshot(true), 10_000);
-    return () => window.clearInterval(timer);
-  }, [Boolean(snapshot), loadSnapshot]);
+    const refreshVisible = () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+      void loadSnapshot(true);
+    };
+    const refreshOnReturn = () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+      refreshVisible();
+      if (tab === "tasks") refreshTasks();
+    };
+    const timer = window.setInterval(refreshVisible, 15_000);
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    window.addEventListener("focus", refreshOnReturn);
+    window.addEventListener("online", refreshOnReturn);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+      window.removeEventListener("focus", refreshOnReturn);
+      window.removeEventListener("online", refreshOnReturn);
+    };
+  }, [Boolean(snapshot), tab, loadSnapshot, refreshTasks]);
 
   const broadcastInvalidate = useCallback(async () => {
     try {

@@ -216,15 +216,46 @@ export async function compressImage(
   }
 }
 
-export async function uploadImage(
+export type ImageKind = "cover" | "received" | "shipped" | "avatar" | "payment_qr" | "receipt";
+
+// Cache only File objects from the current page, never application records.
+export function createImageUploader(send: (file: File, kind: ImageKind, id: string) => Promise<string>, concurrency = 2) {
+  const uploads = new WeakMap<File, Map<ImageKind, { id: string; promise?: Promise<string> }>>();
+  let active = 0;
+  const queue: (() => void)[] = [];
+  async function run<T>(job: () => Promise<T>): Promise<T> {
+    if (active >= concurrency) await new Promise<void>((resolve) => queue.push(resolve));
+    else active++;
+    try { return await job(); }
+    finally {
+      const next = queue.shift();
+      if (next) next();
+      else active--;
+    }
+  }
+  return (file: File, kind: ImageKind): Promise<string> => {
+    let kinds = uploads.get(file);
+    if (!kinds) { kinds = new Map(); uploads.set(file, kinds); }
+    let upload = kinds.get(kind);
+    if (!upload) {
+      const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+      upload = { id };
+      kinds.set(kind, upload);
+    }
+    if (upload.promise) return upload.promise;
+    const entry = upload;
+    entry.promise = run(() => send(file, kind, entry.id)).catch((error) => {
+      entry.promise = undefined;
+      throw error;
+    });
+    return entry.promise;
+  };
+}
+
+async function sendImage(
   file: File,
-  kind:
-    | "cover"
-    | "received"
-    | "shipped"
-    | "avatar"
-    | "payment_qr"
-    | "receipt",
+  kind: ImageKind,
+  uploadId: string,
 ): Promise<string> {
   const compressed =
     await compressImage(file);
@@ -254,6 +285,7 @@ export async function uploadImage(
     "/api/upload",
     {
       method: "POST",
+      headers: { "X-PD-Upload-ID": uploadId },
       body: form,
     },
   );
@@ -270,5 +302,10 @@ export async function uploadImage(
     );
   }
 
-  return data.url as string;
+  if (typeof data.url !== "string" || !data.url.startsWith("/api/blob/")) {
+    throw new Error("上传结果未确认，请重试，已上传的图片不会重复创建。");
+  }
+  return data.url;
 }
+
+export const uploadImage = createImageUploader(sendImage);
