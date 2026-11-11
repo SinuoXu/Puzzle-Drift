@@ -161,6 +161,15 @@ textarea { resize: vertical; }
 .filterBar { display: grid; grid-template-columns: minmax(220px, 1fr) 160px 160px; gap: 10px; margin-bottom: 22px; }
 .puzzleGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .taskList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.taskFilters { display: grid; gap: 12px; margin: 20px 0; }
+.taskSearch { display: grid; gap: 7px; max-width: 560px; font-size: 13px; font-weight: 700; }
+.taskSearchHint { margin: -5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.taskCategoryFilters { display: flex; flex-wrap: wrap; gap: 8px; }
+.taskCategoryButton { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 9px 13px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 13px; font-weight: 700; }
+.taskCategoryButton span { font-size: 12px; opacity: .75; }
+.taskCategoryButton[aria-pressed="true"] { border-color: var(--primary); background: var(--primary); color: white; }
+.taskCategoryButton:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.taskFilterSummary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; color: var(--muted); font-size: 12px; }
 .profilePanel { display: grid; gap: 14px; max-width: 540px; }
 .profilePanel label { display: flex; flex-direction: column; gap: 6px; }
 .compactGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { uploadImage } from "@/lib/client-image";
+import { filterTaskCards, taskCategories, type TaskCategory } from "@/lib/task-filters";
 
 export type Task = {
   id: string;
@@ -143,6 +144,9 @@ export function TasksPanel({
 }) {
   const [tasks, setTasks] =
     useState<Task[]>([]);
+
+  const [category, setCategory] = useState<TaskCategory>("all");
+  const [search, setSearch] = useState("");
 
   const [
     mergeCandidates,
@@ -755,18 +759,66 @@ export function TasksPanel({
     setReceiptFile(null);
   }
 
-  const visibleCount =
+  const totalCount =
     tasks.length +
     mergedGroups.length;
+  const filtered = filterTaskCards(tasks, mergedGroups, category, search);
+  const visibleCount = filtered.tasks.length + filtered.groups.length;
+  const hasFilters = category !== "all" || search.trim().length > 0;
+
+  function clearFilters() {
+    setCategory("all");
+    setSearch("");
+  }
 
   return (
     <section>
       <h2>
         我的待办{" "}
         <small>
-          ({visibleCount})
+          ({totalCount})
         </small>
       </h2>
+
+      <div className="taskFilters">
+        <label className="taskSearch">
+          <span>按图名查找</span>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="输入图名或部分名称"
+            aria-describedby="task-search-hint"
+          />
+        </label>
+        <p className="taskSearchHint" id="task-search-hint">
+          查找几张拼图时，多个关键词用空格分开。
+        </p>
+        <div className="taskCategoryFilters" role="group" aria-label="待办分类">
+          {taskCategories.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              className="taskCategoryButton"
+              aria-pressed={category === value}
+              onClick={() => setCategory(value)}
+            >
+              {label} <span>{filtered.counts[value]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="taskFilterSummary">
+          <span role="status">
+            显示 {visibleCount} / {totalCount} 个待办
+            {loading ? " · 正在更新…" : ""}
+          </span>
+          {hasFilters && (
+            <button type="button" className="textButton" onClick={clearFilters}>
+              清除筛选
+            </button>
+          )}
+        </div>
+      </div>
 
       {error && (
         <div className="errorBox">
@@ -775,7 +827,7 @@ export function TasksPanel({
       )}
 
       {loading &&
-        visibleCount === 0 && (
+        totalCount === 0 && (
           <div className="emptyPanel">
             正在读取待办…
           </div>
@@ -783,14 +835,23 @@ export function TasksPanel({
 
       {!loading &&
         !error &&
-        visibleCount === 0 && (
+        totalCount === 0 && (
           <div className="emptyPanel">
             目前没有待办。
           </div>
         )}
 
+      {!loading && totalCount > 0 && visibleCount === 0 && (
+        <div className="emptyPanel">
+          <p>没有符合条件的待办，试试其他分类或图名。</p>
+          <button type="button" className="secondaryButton" onClick={clearFilters}>
+            查看全部待办
+          </button>
+        </div>
+      )}
+
       <div className="taskList">
-        {mergedGroups.map(
+        {filtered.groups.map(
           (group) => (
             <article
               className="sidebarCard mergedTaskCard"
@@ -900,7 +961,7 @@ export function TasksPanel({
           ),
         )}
 
-        {tasks.map((task) => {
+        {filtered.tasks.map((task) => {
           const candidate =
             task.kind ===
             "shipping_fee"
