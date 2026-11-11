@@ -194,6 +194,9 @@ textarea { resize: vertical; }
 .puzzleCardTitleRow { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .puzzleCard h3 { margin: 0; font-size: 17px; line-height: 1.3; }
 .puzzleCardTitleRow p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+.puzzleCardNote { margin-top: 12px; padding: 10px 11px; border-left: 3px solid #c59137; border-radius: 8px; background: var(--amber-soft); color: #654719; text-align: left; }
+.puzzleCardNote > span { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 800; }
+.puzzleCardNote p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; margin: 0; font-size: 13px; font-weight: 550; line-height: 1.6; }
 .queueCount { font-size: 10px; color: var(--muted); white-space: nowrap; background: var(--surface-2); border-radius: 999px; padding: 5px 7px; }
 .ownerLine { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; margin-top: 14px; }
 .ownerLineLarge { font-size: 13px; margin-top: 18px; }

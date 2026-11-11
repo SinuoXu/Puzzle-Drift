@@ -21,6 +21,7 @@ export function PuzzleCard({
   onOpenUser: (id: string) => void;
 }) {
   const state = stateLabel(puzzle);
+  const ownerNote = puzzle.description?.trim();
 
   function keyboardOpen(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Enter" || event.key === " ") {
@@ -78,6 +79,13 @@ export function PuzzleCard({
           <span>{puzzle.has_box ? "有盒" : "无盒"}</span>
           <span>{puzzle.has_sheet ? "有图纸" : "无图纸"}</span>
         </div>
+
+        {ownerNote && (
+          <div className="puzzleCardNote" title={ownerNote}>
+            <span>图主备注</span>
+            <p>{ownerNote}</p>
+          </div>
+        )}
 
         <div
           className="ownerLine"
